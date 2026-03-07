@@ -22,6 +22,12 @@ import NotFound from "./pages/NotFound";
 import HeadDashboard from "./pages/HeadDashboard";
 import ClubProposals from "./pages/ClubProposals";
 
+// =================== BLOCKCHAIN CERTIFICATE PAGES ===================
+import IssuerDashboard from "./pages/IssuerDashboard";
+import HeadIssuerDashboard from "./pages/HeadIssuerDashboard";
+import CertificatePortal from "./pages/CertificatePortal";
+import VerifyCertificate from "./pages/VerifyCertificate";
+
 // Layout
 import Layout from "./components/Layout";
 import ProtectedRoute from "./components/protectedroute";
@@ -111,6 +117,32 @@ const App = () => {
                   </ProtectedRoute>
                 }
               />
+
+              {/* =================== BLOCKCHAIN CERTIFICATE ROUTES =================== */}
+
+              {/* Issuer Dashboard - Issue certificates */}
+              <Route
+                path="/issuer"
+                element={
+                  <ProtectedRoute>
+                    <IssuerDashboard />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Student Certificate Portal - View certificates */}
+              <Route
+                path="/certificates"
+                element={
+                  <ProtectedRoute>
+                    <CertificatePortal />
+                  </ProtectedRoute>
+                }
+              />
+
+              {/* Public Verification - Verify any certificate (no login required) */}
+              <Route path="/verify" element={<VerifyCertificate />} />
+              <Route path="/verify/:certificateId" element={<VerifyCertificate />} />
 
               {/* 404 */}
               <Route path="*" element={<NotFound />} />

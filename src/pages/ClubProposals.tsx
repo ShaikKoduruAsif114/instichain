@@ -13,12 +13,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { getUsersByIds, voteOnProposalForUser } from "@/utils/firebaseHelpers";
+import { getUsersByIds, voteOnProposalForUser, issueCertificateForApprovedUser } from "@/utils/firebaseHelpers";
 
 const ClubProposals = () => {
   const { toast } = useToast();
   const [clubId, setClubId] = useState<string | null>(null);
   const [adminId, setAdminId] = useState<string | null>(null);
+  const [adminName, setAdminName] = useState<string>("Club Admin");
   const [proposals, setProposals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -40,6 +41,7 @@ const ClubProposals = () => {
       }
 
       const data: any = snap.data();
+      setAdminName(data.name || data.email || "Club Admin");
       if (data.role !== "club") {
         setClubId(null);
         setLoading(false);
@@ -100,7 +102,15 @@ const ClubProposals = () => {
       }
       if (res.status === "ok") {
         if (res.approved) {
-          toast({ title: "User approved and tokens transferred" });
+          toast({ title: "✅ User approved! Issuing certificate..." });
+          // Auto-issue certificate on-chain after approval
+          try {
+            await issueCertificateForApprovedUser(targetUid, res.eventId, adminName);
+            toast({ title: "🎓 Certificate issued on blockchain!", description: "The student can now see it in their dashboard." });
+          } catch (certErr: any) {
+            console.error("Certificate issuance failed:", certErr);
+            toast({ title: "⚠️ Tokens awarded but certificate failed", description: certErr.message, variant: "destructive" });
+          }
         } else {
           toast({ title: "Vote recorded", description: `${res.voteCount} / ${proposal.requiredVotes} votes` });
         }

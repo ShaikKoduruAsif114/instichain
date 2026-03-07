@@ -22,7 +22,7 @@ export type AppUser = {
   uid: string;
   name?: string;
   email?: string;
-  role?: "student" | "club" | "head" | string;
+  role?: "student" | "club" | "head" | "recruiter" | string;
   walletAddress?: string | null;
   clubId?: string | null;
   tokens?: number;

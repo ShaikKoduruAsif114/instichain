@@ -42,9 +42,6 @@ type Club = {
   id: string;
   name: string;
   admins: string[]; // uid list
-  tokenBalance: number;
-  tokenAllowance?: number;
-  requiredApprovals?: number;
 };
 
 const HeadDashboard = () => {
@@ -57,18 +54,12 @@ const HeadDashboard = () => {
   const [clubs, setClubs] = useState<Club[]>([]);
   const [selectedClub, setSelectedClub] = useState<Club | null>(null);
 
-  // UI form states
   const [newClubName, setNewClubName] = useState("");
-  const [allocAmount, setAllocAmount] = useState("");
-  const [allowanceAmount, setAllowanceAmount] = useState("");
-  const [requiredApprovalsValue, setRequiredApprovalsValue] = useState("");
   const [searchEmail, setSearchEmail] = useState("");
   const [searchResult, setSearchResult] = useState<any | null>(null);
 
   const [adminUsers, setAdminUsers] = useState<Record<string, AdminUser[]>>({});
-
-
-  const [ledger, setLedger] = useState<any[]>([]);
+  const [adminAllocAmounts, setAdminAllocAmounts] = useState<Record<string, string>>({});
 
   const loadAll = async (uid: string) => {
     setLoading(true);
@@ -91,7 +82,29 @@ const HeadDashboard = () => {
       setHeadUser(head);
 
       const clubSnap = await getDocs(collection(db, "clubs"));
-      setClubs(clubSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Club)));
+      const loadedClubs = clubSnap.docs.map(d => ({ id: d.id, ...(d.data() as any) } as Club));
+      setClubs(loadedClubs);
+
+      // Pre-load admin details for the club cards
+      const newAdminUsers: Record<string, AdminUser[]> = {};
+      await Promise.all(
+        loadedClubs.map(async (club) => {
+          if (!club.admins || club.admins.length === 0) {
+            newAdminUsers[club.id] = [];
+            return;
+          }
+          const users: AdminUser[] = [];
+          for (const uid of club.admins) {
+            const uSnap = await getDoc(doc(db, "users", uid));
+            if (uSnap.exists()) {
+              const d = uSnap.data();
+              users.push({ uid, name: d.name, email: d.email });
+            }
+          }
+          newAdminUsers[club.id] = users;
+        })
+      );
+      setAdminUsers(newAdminUsers);
 
       setAllowed(true);
     } catch (err) {
@@ -122,16 +135,13 @@ const HeadDashboard = () => {
       return;
     }
     try {
-      await addDoc(collection(db, "clubs"), {
+      const newDocRef = await addDoc(collection(db, "clubs"), {
         name: newClubName.trim(),
         admins: [],
-        tokenBalance: 0,
-        tokenAllowance: 0,
-        requiredApprovals: 1,
         createdAt: serverTimestamp()
       });
       setNewClubName("");
-      if (headUser) await loadAll(headUser.id);
+      setClubs(prev => [...prev, { id: newDocRef.id, name: newClubName.trim(), admins: [] }]);
       toast({ title: "Club created" });
     } catch (err) {
       console.error("createClub", err);
@@ -144,7 +154,7 @@ const HeadDashboard = () => {
     try {
       await deleteDoc(doc(db, "clubs", club.id));
       toast({ title: "Club deleted" });
-      if (headUser) await loadAll(headUser.id);
+      setClubs(prev => prev.filter(c => c.id !== club.id));
       if (selectedClub?.id === club.id) setSelectedClub(null);
     } catch (err) {
       console.error("deleteClub", err);
@@ -152,72 +162,47 @@ const HeadDashboard = () => {
     }
   };
 
-  /* ---------- Allocation & settings ---------- */
+  /* ---------- Allocation ---------- */
 
-  const allocateTokensToClub = async (club: Club) => {
+  const allocateTokensToAdmin = async (adminUid: string, adminName: string) => {
     if (!headUser) return;
-    const amt = Number(allocAmount);
-    if (!amt || amt <= 0) return toast({ title: "Enter a valid amount" });
+    const amountStr = adminAllocAmounts[adminUid];
+    const amt = Number(amountStr);
 
+    if (!amt || amt <= 0) return toast({ title: "Enter a valid amount" });
     if (amt > headUser.availableSupply) {
       return toast({ title: "Not enough supply", variant: "destructive" });
     }
 
     try {
+      // 1. Deduct from Head
       await updateDoc(doc(db, "users", headUser.id), {
         availableSupply: headUser.availableSupply - amt
       });
 
-      await updateDoc(doc(db, "clubs", club.id), {
-        tokenBalance: (club.tokenBalance || 0) + amt
+      // 2. Add to Admin user document directly
+      const adminRef = doc(db, "users", adminUid);
+      const adminSnap = await getDoc(adminRef);
+      const currentTokens = adminSnap.exists() ? (adminSnap.data().tokens || 0) : 0;
+
+      await updateDoc(adminRef, {
+        tokens: currentTokens + amt
       });
 
-      await addDoc(collection(db, "clubs", club.id, "ledger"), {
-        type: "allocation",
-        amount: amt,
-        by: headUser.id,
-        createdAt: serverTimestamp()
-      });
+      toast({ title: `${amt} tokens allocated to ${adminName || "Admin"}` });
 
-      toast({ title: `${amt} tokens allocated to ${club.name}` });
-      setAllocAmount("");
-      await loadAll(headUser.id);
-      if (selectedClub && selectedClub.id === club.id) await loadLedger(club.id);
+      // Clear input
+      setAdminAllocAmounts(prev => ({ ...prev, [adminUid]: "" }));
+
+      // Update local headUser state to avoid full reload
+      setHeadUser(prev => prev ? {
+        ...prev,
+        availableSupply: prev.availableSupply - amt
+      } : null);
+
     } catch (err) {
-      console.error("allocateTokensToClub", err);
+      console.error("allocateTokensToAdmin", err);
       toast({ title: "Allocation failed", variant: "destructive" });
-    }
-  };
-
-  const setClubAllowance = async (club: Club) => {
-    const amt = Number(allowanceAmount);
-    if (isNaN(amt) || amt < 0) return toast({ title: "Enter valid allowance" });
-    try {
-      await updateDoc(doc(db, "clubs", club.id), {
-        tokenAllowance: amt
-      });
-      toast({ title: `Allowance set: ${amt}` });
-      setAllowanceAmount("");
-      if (headUser) await loadAll(headUser.id);
-    } catch (err) {
-      console.error("setClubAllowance", err);
-      toast({ title: "Failed", variant: "destructive" });
-    }
-  };
-
-  const setClubRequiredApprovals = async (club: Club) => {
-    const n = Number(requiredApprovalsValue);
-    if (!Number.isInteger(n) || n < 1) return toast({ title: "Enter valid approvals (>=1)" });
-    try {
-      await updateDoc(doc(db, "clubs", club.id), {
-        requiredApprovals: n
-      });
-      toast({ title: `Required approvals: ${n}` });
-      setRequiredApprovalsValue("");
-      if (headUser) await loadAll(headUser.id);
-    } catch (err) {
-      console.error("setClubRequiredApprovals", err);
-      toast({ title: "Failed", variant: "destructive" });
     }
   };
 
@@ -251,8 +236,16 @@ const HeadDashboard = () => {
       toast({ title: "Admin added" });
       setSearchEmail("");
       setSearchResult(null);
-      if (headUser) await loadAll(headUser.id);
-      setSelectedClub(null); // encourage refresh / reselect to see updates
+
+      // Fetch the updated club to keep the manage panel open and updated
+      const freshClubSnap = await getDoc(doc(db, "clubs", selectedClub.id));
+      if (freshClubSnap.exists()) {
+        const freshClub = { id: freshClubSnap.id, ...freshClubSnap.data() } as Club;
+        setSelectedClub(freshClub);
+        await loadAdminsForClub(freshClub);
+        setClubs(prev => prev.map(c => c.id === freshClub.id ? freshClub : c));
+      }
+
     } catch (err) {
       console.error("addAdminToSelectedClub", err);
       toast({ title: "Failed to add admin", variant: "destructive" });
@@ -272,8 +265,16 @@ const HeadDashboard = () => {
       });
 
       toast({ title: "Admin removed" });
-      if (headUser) await loadAll(headUser.id);
-      setSelectedClub(null);
+
+      // Fetch the updated club to keep the manage panel open and updated
+      const freshClubSnap = await getDoc(doc(db, "clubs", selectedClub.id));
+      if (freshClubSnap.exists()) {
+        const freshClub = { id: freshClubSnap.id, ...freshClubSnap.data() } as Club;
+        setSelectedClub(freshClub);
+        await loadAdminsForClub(freshClub);
+        setClubs(prev => prev.map(c => c.id === freshClub.id ? freshClub : c));
+      }
+
     } catch (err) {
       console.error("removeAdminFromSelectedClub", err);
       toast({ title: "Failed", variant: "destructive" });
@@ -288,28 +289,28 @@ const HeadDashboard = () => {
   };
 
 
-const loadAdminsForClub = async (club: Club) => {
-  if (!club.admins || club.admins.length === 0) {
-    setAdminUsers(prev => ({ ...prev, [club.id]: [] }));
-    return;
-  }
-
-  const users: AdminUser[] = [];
-
-  for (const uid of club.admins) {
-    const snap = await getDoc(doc(db, "users", uid));
-    if (snap.exists()) {
-      const d = snap.data();
-      users.push({
-        uid,
-        name: d.name,
-        email: d.email
-      });
+  const loadAdminsForClub = async (club: Club) => {
+    if (!club.admins || club.admins.length === 0) {
+      setAdminUsers(prev => ({ ...prev, [club.id]: [] }));
+      return;
     }
-  }
 
-  setAdminUsers(prev => ({ ...prev, [club.id]: users }));
-};
+    const users: AdminUser[] = [];
+
+    for (const uid of club.admins) {
+      const snap = await getDoc(doc(db, "users", uid));
+      if (snap.exists()) {
+        const d = snap.data();
+        users.push({
+          uid,
+          name: d.name,
+          email: d.email
+        });
+      }
+    }
+
+    setAdminUsers(prev => ({ ...prev, [club.id]: users }));
+  };
 
 
 
@@ -350,14 +351,6 @@ const loadAdminsForClub = async (club: Club) => {
       console.error("transferHeadRole", err);
       toast({ title: "Transfer failed", variant: "destructive" });
     }
-  };
-
-  /* ---------- Ledger ---------- */
-
-  const loadLedger = async (clubId: string) => {
-    const q = query(collection(db, "clubs", clubId, "ledger"), orderBy("createdAt", "desc"), limit(20));
-    const snap = await getDocs(q);
-    setLedger(snap.docs.map(d => d.data()));
   };
 
   if (loading) return <div className="p-10">Loading head panel...</div>;
@@ -403,27 +396,28 @@ const loadAdminsForClub = async (club: Club) => {
               <CardTitle>{c.name}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="mb-2">Admins: {(c.admins || []).length}</div>
-              <div className="mb-2">Balance: {c.tokenBalance || 0}</div>
-              <div className="mb-2">Allowance: {c.tokenAllowance ?? 0}</div>
-              <div className="mb-2">Required approvals: {c.requiredApprovals ?? 1}</div>
-
-              <div className="flex gap-2 mb-3">
-                <Button onClick={() => { 
-  setSelectedClub(c); 
-  loadLedger(c.id); 
-  loadAdminsForClub(c);
-}}>
-  Manage
-</Button>
-
-                <Button variant="destructive" onClick={() => deleteClub(c)}>Delete</Button>
+              <div className="mb-4">
+                <div className="font-medium">Admins: {(c.admins || []).length}</div>
+                {adminUsers[c.id]?.length > 0 && (
+                  <div className="mt-1 flex flex-col gap-0.5">
+                    {adminUsers[c.id].map(u => (
+                      <div key={u.uid} className="text-xs text-muted-foreground bg-secondary/50 px-2 py-1 rounded w-fit">
+                        {u.name || u.email}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {/* ONLY allocate here, other settings in Manage panel */}
-              <div className="flex gap-2 items-center">
-                <Input placeholder="Allocate tokens" value={allocAmount} onChange={(e) => setAllocAmount(e.target.value)} />
-                <Button onClick={() => allocateTokensToClub(c)}>Allocate</Button>
+              <div className="flex gap-2 mb-3">
+                <Button onClick={() => {
+                  setSelectedClub(c);
+                  loadAdminsForClub(c);
+                }}>
+                  Manage
+                </Button>
+
+                <Button variant="destructive" onClick={() => deleteClub(c)}>Delete</Button>
               </div>
             </CardContent>
           </Card>
@@ -437,20 +431,33 @@ const loadAdminsForClub = async (club: Club) => {
             <div className="mb-4">
               <div className="font-medium">Admins</div>
               {(adminUsers[selectedClub.id]?.length || 0) === 0 && (
-  <div className="text-sm text-muted-foreground">No admins yet</div>
-)}
+                <div className="text-sm text-muted-foreground">No admins yet</div>
+              )}
 
               {(adminUsers[selectedClub.id] || []).map((u) => (
-  <div key={u.uid} className="flex justify-between items-center py-2 border-b">
-    <div>
-      <div className="font-medium">{u.name || "Unnamed"}</div>
-      <div className="text-sm text-muted-foreground">{u.email}</div>
-    </div>
-    <Button variant="destructive" onClick={() => removeAdminFromSelectedClub(u.uid)}>
-      Remove
-    </Button>
-  </div>
-))}
+                <div key={u.uid} className="flex flex-col sm:flex-row justify-between items-start sm:items-center py-3 border-b gap-3 sm:gap-0">
+                  <div>
+                    <div className="font-medium">{u.name || "Unnamed"}</div>
+                    <div className="text-sm text-muted-foreground">{u.email}</div>
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
+                    <div className="flex gap-2 items-center">
+                      <Input
+                        placeholder="Allocate tokens"
+                        value={adminAllocAmounts[u.uid] || ""}
+                        onChange={(e) => setAdminAllocAmounts(prev => ({ ...prev, [u.uid]: e.target.value }))}
+                        className="w-32"
+                      />
+                      <Button size="sm" onClick={() => allocateTokensToAdmin(u.uid, u.name || "Admin")}>
+                        Send
+                      </Button>
+                    </div>
+                    <Button variant="destructive" size="sm" onClick={() => removeAdminFromSelectedClub(u.uid)}>
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              ))}
 
             </div>
 
@@ -471,29 +478,6 @@ const loadAdminsForClub = async (club: Club) => {
                   </div>
                 </div>
               )}
-            </div>
-
-            <div className="mb-4">
-              <div className="font-medium mb-2">Club settings</div>
-              <div className="flex gap-2 items-center mb-2">
-                <Input placeholder="Set allowance" value={allowanceAmount} onChange={(e) => setAllowanceAmount(e.target.value)} />
-                <Button onClick={() => setClubAllowance(selectedClub)}>Set allowance</Button>
-              </div>
-
-              <div className="flex gap-2 items-center">
-                <Input placeholder="Required approvals (int)" value={requiredApprovalsValue} onChange={(e) => setRequiredApprovalsValue(e.target.value)} />
-                <Button onClick={() => setClubRequiredApprovals(selectedClub)}>Set approvals</Button>
-              </div>
-            </div>
-
-            <div>
-              <div className="font-medium mb-2">Ledger (recent)</div>
-              {ledger.length === 0 && <div className="text-sm text-muted-foreground">No ledger entries</div>}
-              {ledger.map((l, i) => (
-                <div key={i} className="text-sm">
-                  {l.type} • {l.amount} • {l.by || "-"} • {l.createdAt?.toDate ? l.createdAt.toDate().toLocaleString() : ""}
-                </div>
-              ))}
             </div>
           </CardContent>
         </Card>

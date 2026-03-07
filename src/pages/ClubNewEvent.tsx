@@ -26,7 +26,9 @@ const ClubNewEvent = () => {
     startTime: "",
     endTime: "",
     capacity: "",
-    tokens: ""
+    tokens: "",
+    certificateTitle: "",
+    certificateDescription: ""
   });
 
   useEffect(() => {
@@ -79,8 +81,8 @@ const ClubNewEvent = () => {
     e.preventDefault();
 
     // basic validation
-    if (!form.name || !form.date || !form.startTime || !form.endTime || !form.tokens) {
-      toast({ title: "Missing fields", description: "Please fill Name, Date, Start/End time and Tokens.", variant: "destructive" });
+    if (!form.name || !form.date || !form.startTime || !form.endTime || !form.tokens || !form.certificateTitle) {
+      toast({ title: "Missing fields", description: "Please fill Name, Date, Start/End time, Tokens, and Certificate Title.", variant: "destructive" });
       return;
     }
 
@@ -93,20 +95,22 @@ const ClubNewEvent = () => {
 
     try {
       await addDoc(collection(db, "events"), {
-  name: form.name,
-  description: form.description || "",
-  venue: form.venue || "",
-  date: form.date,
-  startTime: form.startTime,
-  endTime: form.endTime,
-  capacity: Number(form.capacity || 0),
-  tokens: Number(form.tokens),
-  clubId,
-  participants: [],
-  starredBy: [],
-  status: "upcoming",   // 🔴 THIS WAS MISSING
-  createdAt: serverTimestamp()
-});
+        name: form.name,
+        description: form.description || "",
+        venue: form.venue || "",
+        date: form.date,
+        startTime: form.startTime,
+        endTime: form.endTime,
+        capacity: Number(form.capacity || 0),
+        tokens: Number(form.tokens),
+        certificateTitle: form.certificateTitle.trim(),
+        certificateDescription: form.certificateDescription.trim(),
+        clubId,
+        participants: [],
+        starredBy: [],
+        status: "upcoming",
+        createdAt: serverTimestamp()
+      });
 
 
       toast({ title: "Event created", description: `"${form.name}" created successfully` });
@@ -142,6 +146,23 @@ const ClubNewEvent = () => {
           <Input placeholder="Capacity (optional, leave empty for unlimited)" type="number" min={0} value={form.capacity} onChange={e => updateField("capacity", e.target.value)} />
 
           <Input placeholder="Tokens per participant *" type="number" min={1} required value={form.tokens} onChange={e => updateField("tokens", e.target.value)} />
+
+          {/* Certificate Template */}
+          <div className="space-y-2 pt-2 border-t">
+            <p className="text-sm font-semibold">Certificate Template</p>
+            <Input
+              placeholder="Certificate Title * (e.g. Best Presenter Award)"
+              required
+              value={form.certificateTitle}
+              onChange={e => updateField("certificateTitle", e.target.value)}
+            />
+            <Textarea
+              placeholder="Certificate Description (e.g. Awarded for outstanding performance at...)"
+              value={form.certificateDescription}
+              onChange={e => updateField("certificateDescription", e.target.value)}
+              rows={2}
+            />
+          </div>
 
           <div className="flex justify-end gap-3">
             <Button type="button" variant="outline" onClick={() => navigate("/club")}>Cancel</Button>

@@ -17,7 +17,9 @@ import {
   Menu,
   X,
   Shield,
-  MessageSquare
+  MessageSquare,
+  Award,
+  CheckCircle2,
 } from "lucide-react";
 
 type AppUser = {
@@ -133,11 +135,19 @@ const Navbar = () => {
                   </>
                 )}
 
-                {/* Head Panel */}
+                {/* Head/Issuer Panel */}
                 {role === "head" && (
                   <NavLink to="/head">
-                    <Shield className="inline w-4 h-4 mr-1" />
-                    Head Panel
+                    <Award className="inline w-4 h-4 mr-1" />
+                    Head Dashboard
+                  </NavLink>
+                )}
+
+                {/* Recruiter - Verify Certificates */}
+                {role === "recruiter" && (
+                  <NavLink to="/verify">
+                    <CheckCircle2 className="inline w-4 h-4 mr-1" />
+                    Verify Certificates
                   </NavLink>
                 )}
 
@@ -191,7 +201,8 @@ const Navbar = () => {
                     <Link to="/club/new-event">New Event</Link>
                   </>
                 )}
-                {role === "head" && <Link to="/head">Head Panel</Link>}
+                {role === "head" && <Link to="/head">Head Dashboard</Link>}
+                {role === "recruiter" && <Link to="/verify">Verify Certificates</Link>}
                 <Link to="/profile">Profile</Link>
                 <button onClick={handleLogout}>Sign Out</button>
               </>

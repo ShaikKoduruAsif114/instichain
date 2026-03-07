@@ -18,6 +18,8 @@ import { Progress } from "@/components/ui/progress";
 import {
   Calendar,
   LayoutDashboard,
+  Award,
+  FileText,
 } from "lucide-react";
 
 import {
@@ -25,6 +27,8 @@ import {
   doc,
   getDoc,
   getDocs,
+  query,
+  where,
   QueryDocumentSnapshot,
   DocumentData
 } from "firebase/firestore";
@@ -49,6 +53,7 @@ const Dashboard = () => {
   const [registeredEvents, setRegisteredEvents] = useState<EventItem[]>([]);
   const [attendedEvents, setAttendedEvents] = useState<EventItem[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<EventItem[]>([]);
+  const [certificates, setCertificates] = useState<any[]>([]);
 
   // Convert various date formats to 'YYYY-MM-DD' string
   const toDateString = (raw: any): string | null => {
@@ -141,6 +146,18 @@ const Dashboard = () => {
         setRegisteredEvents(regs);
         setAttendedEvents(atts);
         setUpcomingEvents(upc.slice(0, 3));
+
+        // Load certificates earned by this user
+        // Use userObj directly (not currentUser state — that hasn't updated yet)
+        const certsCol = collection(db, "certificates");
+        const certsQuery = await getDocs(
+          query(certsCol, where("studentEmail", "==", userObj.email))
+        );
+        const userCerts = certsQuery.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({
+          id: d.id,
+          ...d.data(),
+        }));
+        setCertificates(userCerts);
       } catch (err) {
         console.error("Failed to load dashboard data:", err);
       } finally {
@@ -207,6 +224,44 @@ const Dashboard = () => {
         </CardHeader>
         <CardContent>
           <Progress value={calculateProgress()} />
+        </CardContent>
+      </Card>
+
+      {/* Certificates Earned */}
+      <Card>
+        <CardHeader className="flex flex-row justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <Award className="w-5 h-5" /> Certificates Earned
+          </CardTitle>
+          <Button asChild variant="ghost">
+            <Link to="/certificates">View All</Link>
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {certificates.length === 0 ? (
+            <p className="text-muted-foreground">No certificates earned yet</p>
+          ) : (
+            certificates.map((cert) => (
+              <div key={cert.id} className="p-3 border rounded mb-2">
+                <div className="flex justify-between items-start">
+                  <div className="flex-1">
+                    <p className="font-medium">{cert.certificateTitle}</p>
+                    <p className="text-sm text-muted-foreground">
+                      Issued by: {cert.issuerName || "Unknown"}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {cert.issueDate
+                        ? new Date(cert.issueDate).toLocaleDateString()
+                        : "Date not available"}
+                    </p>
+                  </div>
+                  <Badge variant={cert.status === "issued" ? "default" : "secondary"}>
+                    {cert.status}
+                  </Badge>
+                </div>
+              </div>
+            ))
+          )}
         </CardContent>
       </Card>
 
