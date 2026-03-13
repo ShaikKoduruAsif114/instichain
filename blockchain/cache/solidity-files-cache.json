@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "C:\\Users\\shaik\\firebaseproject\\blockchain\\contracts\\CertificateRegistry.sol": {
-      "lastModificationDate": 1772750151799,
-      "contentHash": "615685d82a8bd72c0d3be2d78e6eb53f",
+      "lastModificationDate": 1772970293385,
+      "contentHash": "d4802be8cdb730bb767ed33e3d23fc80",
       "sourceName": "contracts/CertificateRegistry.sol",
       "solcConfig": {
         "version": "0.8.24",

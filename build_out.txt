@@ -1,0 +1,24 @@
+[36mvite v5.4.19 [32mbuilding for production...[36m[39m
+transforming...
+Browserslist: browsers data (caniuse-lite) is 9 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+node_modules/@protobufjs/inquire/index.js (12:18): Use of eval in "node_modules/@protobufjs/inquire/index.js" is strongly discouraged as it poses security risks and may cause issues with minification.
+[32m✓[39m 2234 modules transformed.
+rendering chunks...
+[1m[33m[plugin:vite:reporter][39m[22m [33m[plugin vite:reporter] 
+(!) C:/Users/shaik/firebaseproject/node_modules/firebase/firestore/dist/esm/index.esm.js is dynamically imported by C:/Users/shaik/firebaseproject/src/pages/Complaints.tsx but also statically imported by C:/Users/shaik/firebaseproject/src/components/ConnectWallet.tsx, C:/Users/shaik/firebaseproject/src/components/Navbar.tsx, C:/Users/shaik/firebaseproject/src/components/protectedroute.tsx, C:/Users/shaik/firebaseproject/src/firebaseConfig.ts, C:/Users/shaik/firebaseproject/src/pages/ClubDashboard.tsx, C:/Users/shaik/firebaseproject/src/pages/ClubNewEvent.tsx, C:/Users/shaik/firebaseproject/src/pages/ClubProposals.tsx, C:/Users/shaik/firebaseproject/src/pages/Complaints.tsx, C:/Users/shaik/firebaseproject/src/pages/Contact.tsx, C:/Users/shaik/firebaseproject/src/pages/Dashboard.tsx, C:/Users/shaik/firebaseproject/src/pages/HeadDashboard.tsx, C:/Users/shaik/firebaseproject/src/pages/IssuerDashboard.tsx, C:/Users/shaik/firebaseproject/src/pages/Profile.tsx, C:/Users/shaik/firebaseproject/src/pages/SignIn.tsx, C:/Users/shaik/firebaseproject/src/utils/firebaseHelpers.ts, dynamic import will not move module into another chunk.
+[39m
+computing gzip size...
+[2mdist/[22m[32mindex.html                      [39m[1m[2m    1.03 kB[22m[1m[22m[2m │ gzip:   0.44 kB[22m
+[2mdist/[22m[32massets/hero-image-B8VDn0xO.jpg  [39m[1m[2m   71.01 kB[22m[1m[22m
+[2mdist/[22m[32massets/logo-CXiiGQ3y.png        [39m[1m[2m  751.63 kB[22m[1m[22m
+[2mdist/[22m[35massets/index-CEDEvwsK.css       [39m[1m[2m   70.68 kB[22m[1m[22m[2m │ gzip:  12.37 kB[22m
+[2mdist/[22m[36massets/browser-BXdiCFWD.js      [39m[1m[2m   24.53 kB[22m[1m[22m[2m │ gzip:   9.66 kB[22m
+[2mdist/[22m[36massets/index-CHbkaYRe.js        [39m[1m[33m1,291.28 kB[39m[22m[2m │ gzip: 373.96 kB[22m
+[33m
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+[32m✓ built in 4.37s[39m

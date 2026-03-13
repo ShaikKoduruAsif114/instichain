@@ -29,13 +29,16 @@ import {
   Award,
   FileText,
   Users,
+  Copy,
 } from "lucide-react";
 import {
   connectWallet,
   getCurrentWalletAddress,
   issueCertificate as issueCertificateOnChain,
+  generateVerificationHash,
 } from "@/lib/blockchain";
 import { uploadToIPFS, getIPFSUrl } from "@/lib/ipfs";
+import { generateSampleCertificatePDF } from "@/lib/pdfGenerator";
 import { generateCertificateQRCode, downloadQRCode } from "@/lib/qrcode";
 import { doc, setDoc, collection, getDocs, query, where, updateDoc } from "firebase/firestore";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -169,11 +172,21 @@ const HeadIssuerDashboard = () => {
 
     setIssuanceLoading(true);
     try {
-      // Upload to IPFS if file provided
-      // Note: contract requires non-empty ipfsHash, so we use a placeholder if no PDF
+      // Auto-generate PDF if not provided
       let ipfsHash = "no-pdf";
       if (formData.pdfFile) {
+        toast({ description: "📤 Uploading PDF to IPFS..." });
         ipfsHash = await uploadToIPFS(formData.pdfFile);
+      } else {
+        toast({ description: "📄 Generating certificate PDF..." });
+        const generatedPdf = await generateSampleCertificatePDF({
+          studentName: formData.studentName,
+          courseName: formData.certificateTitle,
+          issuerName: currentUser.name,
+          date: new Date().toISOString(),
+        });
+        toast({ description: "📤 Uploading certificate PDF to IPFS..." });
+        ipfsHash = await uploadToIPFS(generatedPdf);
       }
 
       const certificateData = {
@@ -485,16 +498,32 @@ const HeadIssuerDashboard = () => {
                       )}
                     </Badge>
                   </div>
-                  {cert.qrCode && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="mt-2 w-full"
-                      onClick={() => downloadQRCode(cert.qrCode, cert.certificateTitle)}
-                    >
-                      <QrCode className="w-4 h-4 mr-2" /> Download QR
-                    </Button>
-                  )}
+                  <div className="flex gap-2 mt-2 w-full">
+                    {cert.qrCode && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => downloadQRCode(cert.qrCode!, cert.certificateTitle)}
+                      >
+                        <QrCode className="w-4 h-4 mr-2" /> Download QR
+                      </Button>
+                    )}
+                    {cert.transactionHash && cert.status === "issued" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => {
+                          const hash = generateVerificationHash("cert", cert.transactionHash!);
+                          navigator.clipboard.writeText(hash);
+                          toast({ description: "Verification hash copied to clipboard!" });
+                        }}
+                      >
+                        <Copy className="w-4 h-4 mr-2" /> Copy Hash
+                      </Button>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             ))}

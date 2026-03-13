@@ -45,6 +45,20 @@ const CERTIFICATE_REGISTRY_ABI = [
     stateMutability: "nonpayable",
     type: "function",
   },
+  // Batch Issue Certificates
+  {
+    inputs: [
+      { internalType: "address[]", name: "_studentAddresses", type: "address[]" },
+      { internalType: "string[]", name: "_studentNames", type: "string[]" },
+      { internalType: "string[]", name: "_courses", type: "string[]" },
+      { internalType: "string[]", name: "_issuers", type: "string[]" },
+      { internalType: "string[]", name: "_ipfsHashes", type: "string[]" },
+    ],
+    name: "batchIssueCertificates",
+    outputs: [{ internalType: "uint256[]", name: "", type: "uint256[]" }],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
   // Verify Certificate
   {
     inputs: [{ internalType: "uint256", name: "_certificateId", type: "uint256" }],
@@ -108,15 +122,78 @@ const CERTIFICATE_REGISTRY_ABI = [
     stateMutability: "nonpayable",
     type: "function",
   },
-  // Get Total Certificate Count
+  // Get Total Token Count
   {
     inputs: [],
-    name: "getTotalCertificateCount",
+    name: "getTotalTokenCount",
     outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
     stateMutability: "view",
     type: "function",
   },
+  // Authorize Issuer (onlyOwner)
+  {
+    inputs: [
+      { internalType: "address", name: "_issuer", type: "address" },
+      { internalType: "string", name: "_adminName", type: "string" },
+      { internalType: "string", name: "_clubName", type: "string" }
+    ],
+    name: "authorizeIssuer",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  // Remove Issuer (onlyOwner)
+  {
+    inputs: [{ internalType: "address", name: "_issuer", type: "address" }],
+    name: "removeIssuer",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  // Verify Admin Token
+  {
+    inputs: [{ internalType: "uint256", name: "_tokenId", type: "uint256" }],
+    name: "verifyAdminToken",
+    outputs: [
+      {
+        components: [
+          { internalType: "string", name: "adminName", type: "string" },
+          { internalType: "string", name: "clubName", type: "string" },
+          { internalType: "uint256", name: "issueDate", type: "uint256" },
+          { internalType: "bool", name: "valid", type: "bool" }
+        ],
+        internalType: "struct CertificateRegistry.AdminToken",
+        name: "adminToken",
+        type: "tuple"
+      },
+      { internalType: "bool", name: "isValid", type: "bool" }
+    ],
+    stateMutability: "view",
+    type: "function"
+  },
+  // Verify Admin By Wallet
+  {
+    inputs: [{ internalType: "address", name: "_issuer", type: "address" }],
+    name: "verifyAdminByWallet",
+    outputs: [
+      {
+        components: [
+          { internalType: "string", name: "adminName", type: "string" },
+          { internalType: "string", name: "clubName", type: "string" },
+          { internalType: "uint256", name: "issueDate", type: "uint256" },
+          { internalType: "bool", name: "valid", type: "bool" }
+        ],
+        internalType: "struct CertificateRegistry.AdminToken",
+        name: "adminToken",
+        type: "tuple"
+      },
+      { internalType: "bool", name: "isValid", type: "bool" }
+    ],
+    stateMutability: "view",
+    type: "function"
+  }
 ];
+
 
 // Contract address - loaded from deployment file or environment
 let CONTRACT_ADDRESS: string | null = null;
@@ -297,10 +374,57 @@ export async function issueCertificate(
     }
 
     // Fallback: query total count
-    const totalCount = await contract.getTotalCertificateCount();
+    const totalCount = await contract.getTotalTokenCount();
     return Number(totalCount) - 1;
   } catch (error: any) {
     throw new Error(`Failed to issue certificate: ${error.message}`);
+  }
+}
+
+/**
+ * Issue multiple certificates in a single transaction
+ * @param studentAddresses Array of student addresses
+ * @param studentNames Array of student names
+ * @param courses Array of course names
+ * @param issuers Array of issuer names
+ * @param ipfsHashes Array of IPFS hashes
+ * @returns Array of Certificate IDs
+ */
+export async function batchIssueCertificates(
+  studentAddresses: string[],
+  studentNames: string[],
+  courses: string[],
+  issuers: string[],
+  ipfsHashes: string[]
+): Promise<number[]> {
+  try {
+    const { signer } = await connectWallet();
+    const contract = await getContract(signer);
+
+    const tx = await contract.batchIssueCertificates(
+      studentAddresses,
+      studentNames,
+      courses,
+      issuers,
+      ipfsHashes
+    );
+
+    console.log("📝 Batch transaction sent:", tx.hash);
+
+    const receipt = await tx.wait();
+    console.log("✅ Batch certificates issued! Block:", receipt?.blockNumber);
+
+    const events = receipt?.logs.filter((log: any) =>
+      log.topics[0] === ethers.id("CertificateIssued(uint256,address,string,string,string,string,uint256)")
+    );
+
+    if (events && events.length > 0) {
+      return events.map((e: any) => parseInt(e.topics[1], 16));
+    }
+
+    return [];
+  } catch (error: any) {
+    throw new Error(`Failed to batch issue certificates: ${error.message}`);
   }
 }
 
@@ -421,17 +545,123 @@ export async function revokeCertificate(certificateId: number): Promise<void> {
  * Get total number of certificates issued
  * @returns Total certificate count
  */
-export async function getTotalCertificateCount(): Promise<number> {
+export async function getTotalTokenCount(): Promise<number> {
   try {
     const contract = await getContract();
-    const count = await contract.getTotalCertificateCount();
+    const count = await contract.getTotalTokenCount();
     return Number(count);
   } catch (error: any) {
-    throw new Error(`Failed to get certificate count: ${error.message}`);
+    throw new Error(`Failed to get token count: ${error.message}`);
   }
 }
 
 // Export contract address for debugging
 export function getContractAddress(): string | null {
   return CONTRACT_ADDRESS;
+}
+
+/**
+ * Authorize a wallet address as a certificate issuer on-chain and mint them an Admin NFT.
+ * Must be called by the contract owner (Hardhat Account #0 / deployer).
+ * @param issuerAddress Wallet address to authorize
+ * @param adminName Name of the admin
+ * @param clubName Name of the club
+ */
+export async function authorizeIssuerOnChain(issuerAddress: string, adminName: string, clubName: string): Promise<void> {
+  try {
+    const { signer } = await connectWallet();
+    const contract = await getContract(signer);
+    const tx = await contract.authorizeIssuer(issuerAddress, adminName, clubName);
+    console.log("📝 Authorize issuer tx:", tx.hash);
+    await tx.wait();
+    console.log(`✅ ${issuerAddress} is now an authorized issuer with an Admin NFT`);
+  } catch (error: any) {
+    throw new Error(`Failed to authorize issuer: ${error.message}`);
+  }
+}
+
+/**
+ * Remove issuer authorization from a wallet address and revoke their Admin NFT.
+ * Must be called by the contract owner.
+ * @param issuerAddress Wallet address to de-authorize
+ */
+export async function removeIssuerOnChain(issuerAddress: string): Promise<void> {
+  try {
+    const { signer } = await connectWallet();
+    const contract = await getContract(signer);
+    const tx = await contract.removeIssuer(issuerAddress);
+    console.log("📝 Remove issuer tx:", tx.hash);
+    await tx.wait();
+    console.log(`✅ ${issuerAddress} is no longer an authorized issuer`);
+  } catch (error: any) {
+    throw new Error(`Failed to remove issuer: ${error.message}`);
+  }
+}
+
+export interface AdminToken {
+  adminName: string;
+  clubName: string;
+  issueDate: number;
+  valid: boolean;
+}
+
+/**
+ * Verify an Admin by their wallet address
+ */
+export async function verifyAdminByWallet(issuerAddress: string): Promise<{ adminToken: AdminToken; isValid: boolean }> {
+  try {
+    const contract = await getContract();
+    const result = await contract.verifyAdminByWallet(issuerAddress);
+    return {
+      adminToken: {
+        adminName: result[0].adminName,
+        clubName: result[0].clubName,
+        issueDate: Number(result[0].issueDate),
+        valid: result[0].valid
+      },
+      isValid: result[1]
+    };
+  } catch (error: any) {
+    throw new Error(`Failed to verify admin: ${error.message}`);
+  }
+}
+
+// =================== VERIFICATION HASH UTILS ===================
+
+/**
+ * Generate a hex-encoded verification payload
+ * @param type "cert" or "admin"
+ * @param value certificate ID or wallet address
+ * @returns Hex string like "0x434552543..."
+ */
+export function generateVerificationHash(type: "cert" | "admin", value: string | number): string {
+  const payload = `${type.toUpperCase()}:${value}`;
+  // Convert basic string to hex
+  let hex = "0x";
+  for (let i = 0; i < payload.length; i++) {
+    hex += payload.charCodeAt(i).toString(16).padStart(2, "0");
+  }
+  return hex;
+}
+
+/**
+ * Decode a hex-encoded verification payload
+ * @param hex The encoded hex string
+ * @returns Object with type ("cert" or "admin") and value, or null if invalid
+ */
+export function decodeVerificationHash(hex: string): { type: "cert" | "admin"; value: string } | null {
+  try {
+    if (!hex.startsWith("0x")) return null;
+    let payload = "";
+    for (let i = 2; i < hex.length; i += 2) {
+      payload += String.fromCharCode(parseInt(hex.substr(i, 2), 16));
+    }
+    const [type, value] = payload.split(":");
+    if ((type === "CERT" || type === "ADMIN") && value) {
+      return { type: type.toLowerCase() as "cert" | "admin", value };
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }

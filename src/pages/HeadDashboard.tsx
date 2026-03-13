@@ -22,11 +22,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import ConnectWallet from "@/components/ConnectWallet";
+import { Wallet } from "lucide-react";
+import { authorizeIssuerOnChain, removeIssuerOnChain } from "@/lib/blockchain";
 
 type AdminUser = {
   uid: string;
   name?: string;
   email: string;
+  walletAddress?: string;
 };
 
 
@@ -36,6 +40,7 @@ type HeadUser = {
   role: "head";
   totalSupply: number;
   availableSupply: number;
+  walletAddress?: string;
 };
 
 type Club = {
@@ -57,6 +62,7 @@ const HeadDashboard = () => {
   const [newClubName, setNewClubName] = useState("");
   const [searchEmail, setSearchEmail] = useState("");
   const [searchResult, setSearchResult] = useState<any | null>(null);
+  const [clubToDelete, setClubToDelete] = useState<Club | null>(null);
 
   const [adminUsers, setAdminUsers] = useState<Record<string, AdminUser[]>>({});
   const [adminAllocAmounts, setAdminAllocAmounts] = useState<Record<string, string>>({});
@@ -77,7 +83,8 @@ const HeadDashboard = () => {
         email: data.email,
         role: "head",
         totalSupply: Number(data.totalSupply || 0),
-        availableSupply: Number(data.availableSupply || 0)
+        availableSupply: Number(data.availableSupply || 0),
+        walletAddress: data.walletAddress
       };
       setHeadUser(head);
 
@@ -150,15 +157,16 @@ const HeadDashboard = () => {
   };
 
   const deleteClub = async (club: Club) => {
-    if (!confirm(`Delete ${club.name}? This will remove club document (not users).`)) return;
     try {
       await deleteDoc(doc(db, "clubs", club.id));
       toast({ title: "Club deleted" });
       setClubs(prev => prev.filter(c => c.id !== club.id));
       if (selectedClub?.id === club.id) setSelectedClub(null);
+      setClubToDelete(null);
     } catch (err) {
       console.error("deleteClub", err);
       toast({ title: "Failed to delete", variant: "destructive" });
+      setClubToDelete(null);
     }
   };
 
@@ -233,7 +241,30 @@ const HeadDashboard = () => {
         clubId: selectedClub.id
       });
 
-      toast({ title: "Admin added" });
+      // ⛓️ Authorize the admin as a blockchain certificate issuer
+      // The head's MetaMask (contract owner) must be the connected wallet
+      const adminWallet: string | undefined = searchResult.data?.walletAddress;
+      const adminName: string = searchResult.data?.name || searchResult.data?.email || "Admin";
+      if (adminWallet) {
+        try {
+          toast({ title: "⛓️ Authorizing admin as certificate issuer on blockchain..." });
+          await authorizeIssuerOnChain(adminWallet, adminName, selectedClub.name);
+          toast({ title: "✅ Admin added & authorized as certificate issuer!" });
+        } catch (chainErr: any) {
+          // Don't block the admin add — just warn
+          toast({
+            title: "Admin added to Firestore ✓",
+            description: `Blockchain authorization skipped: ${chainErr.message}. Admin must connect their wallet first, then you can authorize them on-chain.`,
+            variant: "destructive"
+          });
+        }
+      } else {
+        toast({
+          title: "Admin added to Firestore ✓",
+          description: "Admin has no wallet linked yet. They must connect MetaMask first, then you can re-add or authorize them to mint NFTs."
+        });
+      }
+
       setSearchEmail("");
       setSearchResult(null);
 
@@ -251,6 +282,24 @@ const HeadDashboard = () => {
       toast({ title: "Failed to add admin", variant: "destructive" });
     }
   };
+
+  const manuallyAuthorizeAdminOnChain = async (adminUid: string, adminName: string, adminWallet?: string) => {
+    if (!selectedClub) return;
+    if (!adminWallet) {
+      toast({ title: "No wallet linked", description: "Admin must connect MetaMask first. Go to their Profile to see.", variant: "destructive" });
+      return;
+    }
+
+    try {
+      toast({ title: "⛓️ Authorizing admin on blockchain..." });
+      await authorizeIssuerOnChain(adminWallet, adminName, selectedClub.name);
+      toast({ title: "✅ Admin authorized as certificate issuer!" });
+    } catch (err: any) {
+      console.error("Manual auth error", err);
+      toast({ title: "Authorization failed", description: err.message, variant: "destructive" });
+    }
+  };
+
 
   const removeAdminFromSelectedClub = async (uid: string) => {
     if (!selectedClub) return;
@@ -304,7 +353,8 @@ const HeadDashboard = () => {
         users.push({
           uid,
           name: d.name,
-          email: d.email
+          email: d.email,
+          walletAddress: d.walletAddress,
         });
       }
     }
@@ -359,6 +409,20 @@ const HeadDashboard = () => {
   return (
     <div className="container p-8 space-y-6">
       <h1 className="text-3xl font-bold">Head Control Panel</h1>
+
+      {/* Wallet Banner */}
+      <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
+        <CardContent className="py-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <Wallet className="w-5 h-5 text-blue-600 shrink-0 mt-0.5 sm:mt-0" />
+            <div className="flex-1">
+              <div className="font-medium text-sm">MetaMask Wallet</div>
+              <div className="text-xs text-muted-foreground">Link your wallet to interact with the blockchain</div>
+            </div>
+            <ConnectWallet initialAddress={headUser?.walletAddress} />
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardContent>
@@ -417,12 +481,28 @@ const HeadDashboard = () => {
                   Manage
                 </Button>
 
-                <Button variant="destructive" onClick={() => deleteClub(c)}>Delete</Button>
+                <Button variant="destructive" onClick={() => setClubToDelete(c)}>Delete</Button>
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
+
+      {/* In-page delete confirmation dialog */}
+      {clubToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-card border rounded-lg shadow-lg p-6 max-w-sm w-full mx-4 space-y-4">
+            <h2 className="text-lg font-bold">Delete Club</h2>
+            <p className="text-muted-foreground">
+              Are you sure you want to delete <strong>{clubToDelete.name}</strong>? This will remove the club document but not the users.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <Button variant="outline" onClick={() => setClubToDelete(null)}>Cancel</Button>
+              <Button variant="destructive" onClick={() => deleteClub(clubToDelete)}>Delete</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {selectedClub && (
         <Card>
@@ -452,9 +532,19 @@ const HeadDashboard = () => {
                         Send
                       </Button>
                     </div>
-                    <Button variant="destructive" size="sm" onClick={() => removeAdminFromSelectedClub(u.uid)}>
-                      Remove
-                    </Button>
+                    <div className="flex gap-2 items-center mt-2 sm:mt-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => manuallyAuthorizeAdminOnChain(u.uid, u.name || u.email || "Admin", u.walletAddress)}
+                        title="Authorize to mint NFTs on Blockchain"
+                      >
+                        Authorize NFT Minting
+                      </Button>
+                      <Button variant="destructive" size="sm" onClick={() => removeAdminFromSelectedClub(u.uid)}>
+                        Remove
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))}

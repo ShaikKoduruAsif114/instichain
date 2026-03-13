@@ -25,7 +25,7 @@ export async function generateQRCode(text: string): Promise<string> {
         "qrcode module not found. Install with: npm install qrcode"
       );
     }
-    
+
     const qrCode = await QRCode.toDataURL(text, {
       errorCorrectionLevel: "H",
       type: "image/png",
@@ -63,6 +63,16 @@ export function generateVerificationLink(
  */
 export async function generateCertificateQRCode(certificateId: number): Promise<string> {
   const verificationLink = generateVerificationLink(certificateId);
+  return generateQRCode(verificationLink);
+}
+
+/**
+ * Generate QR code for wallet verification
+ * @param walletAddress Wallet address of the admin or student
+ * @returns QR code data URL
+ */
+export async function generateWalletQRCode(walletAddress: string): Promise<string> {
+  const verificationLink = `${window.location.origin}/verify?wallet=${walletAddress}`;
   return generateQRCode(verificationLink);
 }
 

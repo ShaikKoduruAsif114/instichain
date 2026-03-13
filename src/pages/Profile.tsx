@@ -70,7 +70,7 @@ const Profile: React.FC = () => {
 
         <div className="space-y-2">
           <div className="text-sm text-muted-foreground">Link a wallet (recommended)</div>
-          <ConnectWallet />
+          <ConnectWallet initialAddress={wallet} />
         </div>
 
         <div className="mt-2">

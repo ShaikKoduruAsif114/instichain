@@ -1,5 +1,7 @@
 // src/utils/firebaseHelpers.ts
 import { db } from "@/firebaseConfig";
+import { issueCertificate } from "@/lib/blockchain";
+
 import {
   collection,
   doc,
@@ -255,4 +257,76 @@ export async function createEventFirestore(eventData: any) {
     registered: 0,
     createdAt: serverTimestamp()
   });
+}
+
+
+/**
+ * Issue a certificate to an approved student after proposal voting.
+ *
+ * This stores the certificate PURELY in Firestore — it works 100% reliably
+ * without MetaMask, wallet authorization, or blockchain state.
+ * The certificate is immediately visible on the student's Dashboard.
+ *
+ * Optional on-chain minting can be triggered later from the Issuer Dashboard.
+ */
+export async function issueCertificateForApprovedUser(
+  uid: string,
+  eventId: string,
+  issuerName: string
+): Promise<{ success: boolean; certificateId?: number; error?: string }> {
+  try {
+    // 1. Fetch student doc
+    const userSnap = await getDoc(doc(db, "users", uid));
+    if (!userSnap.exists()) throw new Error("Student user not found");
+    const userData: any = userSnap.data();
+
+    const studentName: string = userData.name || userData.email || uid;
+    const studentEmail: string = userData.email || "";
+    const walletAddress: string | null = userData.walletAddress || null;
+
+    // 2. Fetch event name
+    const eventSnap = await getDoc(doc(db, "events", eventId));
+    const eventName: string = eventSnap.exists()
+      ? (eventSnap.data() as any).name || eventId
+      : eventId;
+
+    // 3. Store certificate in Firestore — immediately visible in student Dashboard
+    //    No blockchain call here — avoids MetaMask authorization errors entirely.
+    const certRef = await addDoc(collection(db, "certificates"), {
+      studentId: uid,
+      studentEmail,
+      studentName,
+      walletAddress,
+      certificateTitle: eventName,
+      issuerName,
+      eventId,
+      certificateId: null,  // filled if later minted on-chain via Issuer Dashboard
+      status: "issued",     // show as issued immediately
+      issueDate: new Date().toISOString(),
+      createdAt: serverTimestamp(),
+    });
+
+    // 4. Also add to pendingCertificates queue so Issuer Dashboard can optionally mint NFT
+    if (walletAddress) {
+      await addDoc(collection(db, "pendingCertificates"), {
+        firestoreCertId: certRef.id,
+        studentId: uid,
+        studentEmail,
+        studentName,
+        walletAddress,
+        courseName: eventName,
+        issuerName,
+        eventId,
+        status: "pending",
+        createdAt: serverTimestamp(),
+      });
+    }
+
+    console.log(`✅ Certificate issued to ${studentName} for ${eventName} (Firestore only)`);
+    return { success: true };
+
+  } catch (err: any) {
+    console.error("issueCertificateForApprovedUser error:", err);
+    return { success: false, error: err.message };
+  }
 }

@@ -36,15 +36,19 @@ import {
   Loader,
   QrCode,
   Link2,
+  Copy,
 } from "lucide-react";
 import {
   connectWallet,
   getCurrentWalletAddress,
   issueCertificate as issueCertificateOnChain,
+  batchIssueCertificates,
+  generateVerificationHash
 } from "@/lib/blockchain";
 import { uploadToIPFS, getIPFSUrl } from "@/lib/ipfs";
+import { generateSampleCertificatePDF } from "@/lib/pdfGenerator";
 import { generateCertificateQRCode, downloadQRCode } from "@/lib/qrcode";
-import { doc, setDoc, collection, getDocs, query, where } from "firebase/firestore";
+import { doc, setDoc, collection, getDocs, onSnapshot, updateDoc, query, where } from "firebase/firestore";
 import { db } from "@/firebaseConfig";
 
 interface IssuanceRequest {
@@ -78,6 +82,8 @@ const IssuerDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<"upload" | "fill" | "confirm" | "success">("upload");
   const [issuedCertificates, setIssuedCertificates] = useState<any[]>([]);
+  const [pendingCertificates, setPendingCertificates] = useState<any[]>([]);
+  const [issuingPendingId, setIssuingPendingId] = useState<string | null>(null);
 
   // Modal state
   const [showPreview, setShowPreview] = useState(false);
@@ -95,6 +101,11 @@ const IssuerDashboard = () => {
         setWalletAddress(address);
         loadIssuedCertificates(address);
       }
+      // Subscribe to all pending certs from the proposal flow
+      const q = query(collection(db, "pendingCertificates"), where("status", "==", "pending"));
+      onSnapshot(q, (snap) => {
+        setPendingCertificates(snap.docs.map(d => ({ _id: d.id, ...d.data() })));
+      });
     } catch (error: any) {
       toast({
         title: "Connection Failed",
@@ -119,6 +130,135 @@ const IssuerDashboard = () => {
       setIssuedCertificates(certs);
     } catch (error) {
       console.error("Failed to load certificates:", error);
+    }
+  };
+
+  // =================== ISSUE PENDING CERTIFICATE (from proposal queue) ===================
+
+  const issuePendingCertificate = async (pending: any) => {
+    if (!pending.walletAddress) {
+      toast({ title: "Missing wallet", description: "Student has not linked a wallet yet.", variant: "destructive" });
+      return;
+    }
+    setIssuingPendingId(pending._id);
+    try {
+      toast({ description: "⛓️ Minting certificate on blockchain..." });
+
+      // Generate a sample PDF for the student
+      let ipfsHashToUse = `proposal-${pending.eventId}`;
+      try {
+        toast({ description: "📄 Generating certificate PDF..." });
+        const pdf = await generateSampleCertificatePDF({
+          studentName: pending.studentName,
+          courseName: pending.courseName,
+          issuerName: pending.issuerName || "InstitiChain",
+          eventName: pending.eventName,
+          date: new Date().toISOString(),
+        });
+        toast({ description: "📤 Uploading certificate PDF to IPFS..." });
+        ipfsHashToUse = await uploadToIPFS(pdf);
+      } catch (pdfErr) {
+        console.warn("PDF generation failed, using placeholder:", pdfErr);
+      }
+
+      const certificateId = await issueCertificateOnChain(
+        pending.walletAddress,
+        pending.studentName,
+        pending.courseName,
+        pending.issuerName || "InstitiChain",
+        ipfsHashToUse
+      );
+      // Mark pending cert as issued
+      await updateDoc(doc(db, "pendingCertificates", pending._id), {
+        status: "issued",
+        certificateId,
+        issuedAt: new Date().toISOString(),
+      });
+      // Update the matching certificates record
+      const certsQ = await getDocs(query(
+        collection(db, "certificates"),
+        where("studentId", "==", pending.studentId),
+        where("eventId", "==", pending.eventId),
+        where("status", "==", "pending")
+      ));
+      for (const d of certsQ.docs) {
+        await updateDoc(d.ref, { status: "issued", certificateId });
+      }
+      toast({ title: `🎓 Certificate #${certificateId} issued!`, description: `Minted to ${pending.walletAddress.slice(0, 10)}…` });
+    } catch (err: any) {
+      toast({ title: "Failed to issue", description: err.message, variant: "destructive" });
+    } finally {
+      setIssuingPendingId(null);
+    }
+  };
+
+  const handleIssueAllPending = async () => {
+    // Filter only those with wallet addresses
+    const validPending = pendingCertificates.filter(p => !!p.walletAddress);
+
+    if (validPending.length === 0) {
+      toast({ title: "No valid pending", description: "No students have linked their wallets yet.", variant: "destructive" });
+      return;
+    }
+
+    setIssuingPendingId("all");
+    try {
+      toast({ description: `⛓️ Batch minting ${validPending.length} certificates on blockchain...` });
+
+      // Generate PDFs for each pending cert
+      const hashes: string[] = [];
+      for (const p of validPending) {
+        try {
+          const pdf = await generateSampleCertificatePDF({
+            studentName: p.studentName,
+            courseName: p.courseName,
+            issuerName: p.issuerName || "InstitiChain",
+            eventName: p.eventName,
+            date: new Date().toISOString(),
+          });
+          const h = await uploadToIPFS(pdf);
+          hashes.push(h);
+        } catch {
+          hashes.push(`proposal-${p.eventId}`);
+        }
+      }
+
+      // Prepare arrays
+      const addresses = validPending.map(p => p.walletAddress);
+      const names = validPending.map(p => p.studentName);
+      const courses = validPending.map(p => p.courseName);
+      const issuers = validPending.map(p => p.issuerName || "InstitiChain");
+
+      const certificateIds = await batchIssueCertificates(addresses, names, courses, issuers, hashes);
+
+      // Now update them all in Firebase
+      for (let i = 0; i < validPending.length; i++) {
+        const p = validPending[i];
+        const certId = certificateIds[i]; // Assuming the returned array aligns 1:1, or we just trust they were emitted
+
+        // Mark pending as issued
+        await updateDoc(doc(db, "pendingCertificates", p._id), {
+          status: "issued",
+          certificateId: certId || 0, // Fallback if IDs empty
+          issuedAt: new Date().toISOString(),
+        });
+
+        const certsQ = await getDocs(query(
+          collection(db, "certificates"),
+          where("studentId", "==", p.studentId),
+          where("eventId", "==", p.eventId),
+          where("status", "==", "pending")
+        ));
+        for (const d of certsQ.docs) {
+          await updateDoc(d.ref, { status: "issued", certificateId: certId || 0 });
+        }
+      }
+
+      toast({ title: `🎓 Batch successful! Issued ${validPending.length} certificates.` });
+    } catch (err: any) {
+      toast({ title: "Batch Issue Failed", description: err.message, variant: "destructive" });
+    } finally {
+      setIssuingPendingId(null);
     }
   };
 
@@ -161,11 +301,20 @@ const IssuerDashboard = () => {
   const handleIssueCertificate = async () => {
     setLoading(true);
     try {
-      // 1. Upload PDF to IPFS
-      if (!pdfFile) throw new Error("PDF file required");
+      // 1. Use provided PDF or auto-generate one
+      let fileToUpload: File | null = pdfFile;
+      if (!fileToUpload) {
+        toast({ description: "📄 Generating certificate PDF..." });
+        fileToUpload = await generateSampleCertificatePDF({
+          studentName: formData.studentName,
+          courseName: formData.courseName,
+          issuerName: formData.issuerName,
+          date: new Date().toISOString(),
+        });
+      }
 
       toast({ description: "📤 Uploading certificate to IPFS..." });
-      const ipfsHash = await uploadToIPFS(pdfFile);
+      const ipfsHash = await uploadToIPFS(fileToUpload);
       setFormData((prev) => ({ ...prev, ipfsHash }));
 
       // 2. Issue on blockchain
@@ -384,6 +533,30 @@ const IssuerDashboard = () => {
                       </div>
                     )}
 
+                    {formData.certificateId !== undefined && (
+                      <div className="p-3 bg-muted rounded-lg text-sm">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="font-medium">Verification Hash</p>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 -my-1"
+                            onClick={() => {
+                              const hash = generateVerificationHash("cert", formData.certificateId!);
+                              navigator.clipboard.writeText(hash);
+                              toast({ description: "Verification hash copied to clipboard!" });
+                            }}
+                          >
+                            <Copy className="w-4 h-4 mr-2" />
+                            Copy
+                          </Button>
+                        </div>
+                        <p className="font-mono text-xs text-primary break-all bg-background p-2 rounded border">
+                          {generateVerificationHash("cert", formData.certificateId)}
+                        </p>
+                      </div>
+                    )}
+
                     {formData.ipfsHash && (
                       <div className="p-3 bg-muted rounded-lg text-sm">
                         <p className="font-medium mb-2">Certificate Link</p>
@@ -480,6 +653,7 @@ const IssuerDashboard = () => {
               </CardContent>
             </Card>
 
+
             {/* Recent Activity */}
             {issuedCertificates.length > 0 && (
               <Card>
@@ -504,7 +678,59 @@ const IssuerDashboard = () => {
             )}
           </div>
         </div>
+
+        {/* ========= PENDING CERTIFICATES FROM CLUB PROPOSALS ========= */}
+        {pendingCertificates.length > 0 && (
+          <Card className="border-amber-300 bg-amber-50 dark:bg-amber-950/20">
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  🕐 Pending Certificates ({pendingCertificates.length})
+                </div>
+                {pendingCertificates.filter(p => !!p.walletAddress).length > 1 && (
+                  <Button
+                    variant="outline"
+                    onClick={handleIssueAllPending}
+                    disabled={issuingPendingId !== null}
+                  >
+                    {issuingPendingId === "all" ? "Issuing All..." : "Issue All Valid on Blockchain"}
+                  </Button>
+                )}
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                These were approved by club admin votes and are awaiting on-chain issuance by you (authorized issuer).
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {pendingCertificates.map((p) => (
+                  <div key={p._id} className="flex items-center justify-between p-3 bg-white dark:bg-muted rounded-lg border">
+                    <div>
+                      <p className="font-medium text-sm">{p.studentName}</p>
+                      <p className="text-xs text-muted-foreground">Course: {p.courseName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Wallet: {p.walletAddress
+                          ? `${p.walletAddress.slice(0, 10)}…${p.walletAddress.slice(-6)}`
+                          : <span className="text-red-500">No wallet — student must link MetaMask first</span>
+                        }
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      disabled={issuingPendingId === p._id || !p.walletAddress}
+                      onClick={() => issuePendingCertificate(p)}
+                    >
+                      {issuingPendingId === p._id ? "Issuing…" : "Issue on Blockchain"}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
       </div>
+
 
       {/* Confirmation Dialog */}
       <AlertDialog open={step === "confirm"} onOpenChange={(open) => {

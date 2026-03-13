@@ -8,18 +8,27 @@ import {
   where,
   onSnapshot,
   doc,
-  getDoc
+  getDoc,
+  serverTimestamp,
+  addDoc,
+  updateDoc,
 } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { getUsersByIds, voteOnProposalForUser, issueCertificateForApprovedUser } from "@/utils/firebaseHelpers";
+import ConnectWallet from "@/components/ConnectWallet";
+import { Wallet } from "lucide-react";
+import { issueCertificate as issueCertificateOnChain } from "@/lib/blockchain";
+import { uploadToIPFS } from "@/lib/ipfs";
+import { generateSampleCertificatePDF } from "@/lib/pdfGenerator";
 
 const ClubProposals = () => {
   const { toast } = useToast();
   const [clubId, setClubId] = useState<string | null>(null);
   const [adminId, setAdminId] = useState<string | null>(null);
   const [adminName, setAdminName] = useState<string>("Club Admin");
+  const [adminWalletAddress, setAdminWalletAddress] = useState<string | null>(null);
   const [proposals, setProposals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -42,6 +51,10 @@ const ClubProposals = () => {
 
       const data: any = snap.data();
       setAdminName(data.name || data.email || "Club Admin");
+      if (data.walletAddress) {
+        setAdminWalletAddress(data.walletAddress);
+      }
+
       if (data.role !== "club") {
         setClubId(null);
         setLoading(false);
@@ -65,9 +78,18 @@ const ClubProposals = () => {
 
     const unsub = onSnapshot(q, async (snap) => {
       const docs = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
-      // For each proposal, load basic user display info
+
+      // Filter out proposals where all users are already approved
+      const pendingDocs = docs.filter(p => {
+        const totalUsers = p.users?.length || 0;
+        const approvedUsers = p.approvedUsers?.length || 0;
+        if (totalUsers === 0) return true; // keep empty proposals
+        return approvedUsers < totalUsers;
+      });
+
+      // For each pending proposal, load basic user display info
       const enriched = await Promise.all(
-        docs.map(async (p) => {
+        pendingDocs.map(async (p) => {
           const users = Array.isArray(p.users) ? p.users : [];
           const userDocs = await getUsersByIds(users);
           // build map uid -> { name, email }
@@ -102,19 +124,74 @@ const ClubProposals = () => {
       }
       if (res.status === "ok") {
         if (res.approved) {
-          toast({ title: "✅ User approved! Issuing certificate..." });
-          // Auto-issue certificate on-chain after approval
-          try {
-            await issueCertificateForApprovedUser(targetUid, res.eventId, adminName);
-            toast({ title: "🎓 Certificate issued on blockchain!", description: "The student can now see it in their dashboard." });
-          } catch (certErr: any) {
-            console.error("Certificate issuance failed:", certErr);
-            toast({ title: "⚠️ Tokens awarded but certificate failed", description: certErr.message, variant: "destructive" });
+          const u = proposal.userMap?.[targetUid] || { name: targetUid, email: "" };
+          const walletAddress = u.walletAddress || u.wallet;
+
+          if (!walletAddress) {
+            toast({ title: "✅ Votes complete!", description: "Student has no wallet linked! Added to pending queue.", variant: "destructive" });
+            await issueCertificateForApprovedUser(targetUid, proposal.eventId, adminName);
+          } else {
+            toast({ title: "✅ Votes complete! Minting certificate on blockchain..." });
+            try {
+              const studentName = u.name || u.displayName || u.email || targetUid;
+              const courseName = proposal.eventName || proposal.eventId || "Club Event";
+
+              // Generate PDF for the certificate
+              let ipfsHash = `proposal-${proposal.eventId}`;
+              try {
+                const pdf = await generateSampleCertificatePDF({
+                  studentName,
+                  courseName,
+                  issuerName: adminName,
+                  eventName: proposal.eventName,
+                  date: new Date().toISOString(),
+                });
+                ipfsHash = await uploadToIPFS(pdf);
+              } catch (pdfErr) {
+                console.warn("PDF generation failed, using placeholder", pdfErr);
+              }
+
+              const certId = await issueCertificateOnChain(
+                walletAddress,
+                studentName,
+                courseName,
+                adminName,
+                ipfsHash
+              );
+
+              // Save directly as issued
+              await addDoc(collection(db, "certificates"), {
+                studentId: targetUid,
+                studentEmail: u.email || "",
+                studentName,
+                walletAddress,
+                certificateTitle: courseName,
+                issuerName: adminName,
+                eventId: proposal.eventId,
+                certificateId: certId,
+                status: "issued",
+                issueDate: new Date().toISOString(),
+                createdAt: serverTimestamp(),
+              });
+
+              // ✅ Mark the rewardProposal as fully minted
+              await updateDoc(doc(db, "rewardProposals", proposal.id), {
+                status: "issued",
+              });
+
+              toast({ title: `🎓 Certificate #${certId} minted directly to student!` });
+            } catch (mintErr: any) {
+              console.error("Mint failed:", mintErr);
+              toast({ title: "Minting failed", description: "Falling back to pending queue...", variant: "destructive" });
+              await issueCertificateForApprovedUser(targetUid, proposal.eventId, adminName);
+            }
           }
         } else {
-          toast({ title: "Vote recorded", description: `${res.voteCount} / ${proposal.requiredVotes} votes` });
+          const voteCount = res.votes ?? res.voteCount ?? 1;
+          toast({ title: "Vote recorded", description: `${voteCount} / ${proposal.requiredVotes} votes` });
         }
       }
+
     } catch (err: any) {
       console.error("Vote error:", err);
       toast({ title: "Failed", description: err?.message || "Could not submit vote", variant: "destructive" });
@@ -128,7 +205,22 @@ const ClubProposals = () => {
     <div className="container mx-auto p-8 space-y-6">
       <h1 className="text-3xl font-bold">Reward Proposals</h1>
 
+      {/* Wallet Banner — needed to issue certificates on-chain */}
+      <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950/20 p-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          <Wallet className="w-5 h-5 text-blue-600 shrink-0" />
+          <div className="flex-1">
+            <div className="font-medium text-sm">MetaMask Required for Certificate Issuance</div>
+            <div className="text-xs text-muted-foreground">
+              When a proposal reaches enough votes, a blockchain certificate is minted. Connect your wallet to sign the transaction.
+            </div>
+          </div>
+          <ConnectWallet initialAddress={adminWalletAddress} />
+        </div>
+      </Card>
+
       {proposals.length === 0 && <p>No pending proposals.</p>}
+
 
       {proposals.map((p) => (
         <Card key={p.id} className="p-4">

@@ -14,12 +14,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import ConnectWallet from "@/components/ConnectWallet";
 
 import {
   Calendar,
   LayoutDashboard,
   Award,
   FileText,
+  Wallet,
+  QrCode,
+  Share2
 } from "lucide-react";
 
 import {
@@ -32,6 +36,17 @@ import {
   QueryDocumentSnapshot,
   DocumentData
 } from "firebase/firestore";
+
+import { useToast } from "@/hooks/use-toast";
+import { generateCertificateQRCode } from "@/lib/qrcode";
+
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type EventItem = {
   id: string;
@@ -49,11 +64,16 @@ const Dashboard = () => {
 
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any | null>(null);
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [registeredEvents, setRegisteredEvents] = useState<EventItem[]>([]);
   const [attendedEvents, setAttendedEvents] = useState<EventItem[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<EventItem[]>([]);
   const [certificates, setCertificates] = useState<any[]>([]);
+
+  const { toast } = useToast();
+  const [qrCodeUrl, setQrCodeUrl] = useState<string | null>(null);
+  const [selectedCertForQr, setSelectedCertForQr] = useState<any | null>(null);
 
   // Convert various date formats to 'YYYY-MM-DD' string
   const toDateString = (raw: any): string | null => {
@@ -105,6 +125,7 @@ const Dashboard = () => {
         }
 
         setCurrentUser(userObj);
+        setWalletAddress(userObj.walletAddress || null);
 
         // load all events (we'll filter locally)
         const eventsCol = collection(db, "events");
@@ -147,16 +168,19 @@ const Dashboard = () => {
         setAttendedEvents(atts);
         setUpcomingEvents(upc.slice(0, 3));
 
-        // Load certificates earned by this user
-        // Use userObj directly (not currentUser state — that hasn't updated yet)
+        // Load certificates earned by this user — query by uid OR email for full coverage
         const certsCol = collection(db, "certificates");
-        const certsQuery = await getDocs(
-          query(certsCol, where("studentEmail", "==", userObj.email))
-        );
-        const userCerts = certsQuery.docs.map((d: QueryDocumentSnapshot<DocumentData>) => ({
-          id: d.id,
-          ...d.data(),
-        }));
+        const [certsByEmail, certsByUid] = await Promise.all([
+          getDocs(query(certsCol, where("studentEmail", "==", userObj.email))),
+          getDocs(query(certsCol, where("studentId", "==", user.uid)))
+        ]);
+        // Merge, deduplicate by doc id
+        const certMap = new Map<string, any>();
+        [...certsByEmail.docs, ...certsByUid.docs].forEach(d => {
+          certMap.set(d.id, { id: d.id, ...d.data() });
+        });
+        const userCerts = Array.from(certMap.values());
+
         setCertificates(userCerts);
       } catch (err) {
         console.error("Failed to load dashboard data:", err);
@@ -184,6 +208,28 @@ const Dashboard = () => {
         <h1 className="text-3xl font-bold">Welcome back, {currentUser.name} 👋</h1>
         <p className="text-muted-foreground">Track events and earn rewards</p>
       </div>
+
+      {/* Wallet Banner */}
+      <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950/20">
+        <CardContent className="py-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <Wallet className="w-5 h-5 text-blue-600 shrink-0 mt-0.5 sm:mt-0" />
+            <div className="flex-1">
+              <div className="font-medium text-sm">MetaMask Wallet</div>
+              {walletAddress ? (
+                <div className="text-xs text-muted-foreground font-mono">
+                  Connected: {walletAddress.slice(0, 10)}…{walletAddress.slice(-6)}
+                </div>
+              ) : (
+                <div className="text-xs text-orange-600">
+                  No wallet linked — you need a wallet to receive certificates
+                </div>
+              )}
+            </div>
+            <ConnectWallet initialAddress={walletAddress} />
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -255,15 +301,76 @@ const Dashboard = () => {
                         : "Date not available"}
                     </p>
                   </div>
-                  <Badge variant={cert.status === "issued" ? "default" : "secondary"}>
-                    {cert.status}
-                  </Badge>
+                  <div className="flex flex-col items-end gap-2">
+                    <Badge variant={cert.status === "issued" ? "default" : "secondary"}>
+                      {cert.status}
+                    </Badge>
+                    {cert.status === "issued" && cert.certificateId && (
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={() => {
+                          const url = `${window.location.origin}/verify/${cert.certificateId}`;
+                          navigator.clipboard.writeText(url);
+                          toast({ description: "Verification link copied!" });
+                        }}>
+                          <Share2 className="w-3 h-3 mr-1" />
+                          Link
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={async () => {
+                          setSelectedCertForQr(cert);
+                          try {
+                            const qr = await generateCertificateQRCode(cert.certificateId);
+                            setQrCodeUrl(qr);
+                          } catch (err) {
+                            console.error("Failed to generate QR for cert", err);
+                          }
+                        }}>
+                          <QrCode className="w-3 h-3 mr-1" />
+                          QR
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             ))
           )}
         </CardContent>
       </Card>
+
+      {/* QR Code Dialog */}
+      <Dialog open={!!selectedCertForQr} onOpenChange={(open) => {
+        if (!open) {
+          setSelectedCertForQr(null);
+          setQrCodeUrl(null);
+        }
+      }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Verification QR Code</DialogTitle>
+            <DialogDescription>Scan to verify {selectedCertForQr?.certificateTitle}</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col items-center justify-center p-6 space-y-4">
+            {qrCodeUrl ? (
+              <>
+                <div className="p-4 bg-white rounded-xl border shadow-sm">
+                  <img src={qrCodeUrl} alt="Certificate QR" className="w-48 h-48" />
+                </div>
+                <Button onClick={() => {
+                  const link = document.createElement("a");
+                  link.href = qrCodeUrl;
+                  link.download = `certificate-${selectedCertForQr?.certificateId}-qr.png`;
+                  link.click();
+                }} className="w-full">
+                  <QrCode className="w-4 h-4 mr-2" />
+                  Save QR Code
+                </Button>
+              </>
+            ) : (
+              <p className="text-muted-foreground">Loading QR Code...</p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Registered Events */}
       <Card>
@@ -291,7 +398,7 @@ const Dashboard = () => {
           )}
         </CardContent>
       </Card>
-    </div>
+    </div >
   );
 };
 

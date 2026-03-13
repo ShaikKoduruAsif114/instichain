@@ -1,8 +1,5 @@
 require("@nomicfoundation/hardhat-toolbox");
-require("dotenv").config();
-
-const PRIVATE_KEY = process.env.PRIVATE_KEY || "0x0000000000000000000000000000000000000000000000000000000000000000";
-const AMOY_RPC = process.env.AMOY_RPC || "https://rpc-amoy.polygon.technology";
+require("dotenv").config({ path: '../.env' });
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
@@ -31,13 +28,14 @@ module.exports = {
     ],
   },
   networks: {
-    amoy: {
-      url: AMOY_RPC,
-      accounts: [PRIVATE_KEY],
-      chainId: 80002,
-    },
     localhost: {
       url: "http://127.0.0.1:8545",
+    },
+    sepolia: {
+      url: process.env.VITE_SEPOLIA_RPC_URL || "",
+      accounts: process.env.PRIVATE_KEY ? [
+        process.env.PRIVATE_KEY.startsWith("0x") ? process.env.PRIVATE_KEY : `0x${process.env.PRIVATE_KEY}`
+      ] : [],
     },
   },
   paths: {

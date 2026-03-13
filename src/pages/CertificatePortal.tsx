@@ -39,8 +39,8 @@ import {
   getStudentCertificates,
   CertificateWithId,
 } from "@/lib/blockchain";
-import { getIPFSUrl } from "@/lib/ipfs";
-import { downloadQRCode } from "@/lib/qrcode";
+import { getIPFSUrl, isValidIPFSHash } from "@/lib/ipfs";
+import { generateCertificateQRCode } from "@/lib/qrcode";
 
 const CertificatePortal = () => {
   const { toast } = useToast();
@@ -50,6 +50,7 @@ const CertificatePortal = () => {
   const [loading, setLoading] = useState(true);
   const [selectedCert, setSelectedCert] = useState<CertificateWithId | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [certQrCodeUrl, setCertQrCodeUrl] = useState<string | null>(null);
 
   // =================== INITIALIZATION ===================
 
@@ -270,9 +271,15 @@ const CertificatePortal = () => {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => {
+                        onClick={async () => {
                           setSelectedCert(cert);
                           setShowDetails(true);
+                          try {
+                            const qr = await generateCertificateQRCode(cert.certificateId);
+                            setCertQrCodeUrl(qr);
+                          } catch (err) {
+                            console.error("Failed to generate QR for cert", err);
+                          }
                         }}
                         className="flex-1"
                       >
@@ -325,44 +332,59 @@ const CertificatePortal = () => {
               {/* IPFS Link */}
               <div className="space-y-2">
                 <p className="text-sm font-medium">Certificate PDF</p>
-                <a
-                  href={getIPFSUrl(selectedCert.ipfsHash)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-2 p-3 border rounded-lg hover:bg-muted"
-                >
-                  <FileText className="w-4 h-4" />
-                  <span className="text-sm font-medium flex-1 break-all">
-                    {selectedCert.ipfsHash}
-                  </span>
-                  <ExternalLink className="w-4 h-4" />
-                </a>
+                {isValidIPFSHash(selectedCert.ipfsHash) ? (
+                  <a
+                    href={getIPFSUrl(selectedCert.ipfsHash)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 p-3 border rounded-lg hover:bg-muted"
+                  >
+                    <FileText className="w-4 h-4" />
+                    <span className="text-sm font-medium flex-1 break-all">
+                      {selectedCert.ipfsHash}
+                    </span>
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                ) : (
+                  <div className="flex items-center gap-2 p-3 border rounded-lg bg-muted/50">
+                    <FileText className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
+                      No PDF available for this certificate
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* QR Code */}
               <div className="space-y-2">
                 <p className="text-sm font-medium">Verification QR Code</p>
                 <div className="flex items-center gap-4">
-                  <div className="p-4 bg-muted rounded-lg">
-                    <p className="text-xs text-muted-foreground text-center">
-                      QR Code for verification link
-                    </p>
-                    <p className="text-xs text-muted-foreground text-center">
-                      Scan to verify certificate
-                    </p>
+                  <div className="p-4 bg-white rounded-lg border shadow-sm flex flex-col items-center">
+                    {certQrCodeUrl ? (
+                      <>
+                        <img src={certQrCodeUrl} alt="Certificate QR" className="w-32 h-32" />
+                        <p className="text-xs text-muted-foreground text-center mt-2">
+                          Scan to verify certificate
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-muted-foreground py-10 w-32 text-center">Loading QR...</p>
+                    )}
                   </div>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      // In a real app, generate QR code here
-                      toast({
-                        description: "QR code generation feature coming soon",
-                      });
-                    }}
-                  >
-                    <QrCode className="w-4 h-4 mr-2" />
-                    Generate QR
-                  </Button>
+                  {certQrCodeUrl && (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        const link = document.createElement("a");
+                        link.href = certQrCodeUrl;
+                        link.download = `certificate-${selectedCert.certificateId}-qr.png`;
+                        link.click();
+                      }}
+                    >
+                      <QrCode className="w-4 h-4 mr-2" />
+                      Save QR
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -398,21 +420,28 @@ const CertificatePortal = () => {
               </div>
 
               {/* Download PDF Button */}
-              <Button
-                onClick={() => {
-                  const ipfsUrl = getIPFSUrl(selectedCert.ipfsHash);
-                  const a = document.createElement("a");
-                  a.href = ipfsUrl;
-                  a.download = `certificate-${selectedCert.certificateId}.pdf`;
-                  document.body.appendChild(a);
-                  a.click();
-                  document.body.removeChild(a);
-                }}
-                className="w-full"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Download Certificate PDF
-              </Button>
+              {isValidIPFSHash(selectedCert.ipfsHash) ? (
+                <Button
+                  onClick={() => {
+                    const ipfsUrl = getIPFSUrl(selectedCert.ipfsHash);
+                    const a = document.createElement("a");
+                    a.href = ipfsUrl;
+                    a.download = `certificate-${selectedCert.certificateId}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                  }}
+                  className="w-full"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download Certificate PDF
+                </Button>
+              ) : (
+                <Button variant="outline" className="w-full" disabled>
+                  <Download className="w-4 h-4 mr-2" />
+                  No PDF Available
+                </Button>
+              )}
             </div>
           )}
         </DialogContent>

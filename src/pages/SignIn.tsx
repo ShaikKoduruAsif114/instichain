@@ -173,7 +173,7 @@ const SignIn: React.FC = () => {
   return (
     <div className="max-w-2xl mx-auto mt-8 p-8">
       <h1 className="text-4xl font-bold text-center mb-2">
-        Certificate Management System
+        Credential Management System
       </h1>
       <p className="text-center text-gray-600 mb-8">
         Choose your role to sign in
@@ -191,8 +191,8 @@ const SignIn: React.FC = () => {
         <div
           onClick={() => handleRoleSelection("student")}
           className={`p-6 border-2 rounded-lg cursor-pointer transition ${role === "student"
-              ? "border-blue-600 bg-blue-50"
-              : "border-gray-200 hover:border-blue-300"
+            ? "border-blue-600 bg-blue-50"
+            : "border-gray-200 hover:border-blue-300"
             }`}
         >
           <h3 className="text-lg font-semibold mb-2">🎓 Insti Zone</h3>
@@ -205,8 +205,8 @@ const SignIn: React.FC = () => {
         <div
           onClick={() => handleRoleSelection("recruiter")}
           className={`p-6 border-2 rounded-lg cursor-pointer transition ${role === "recruiter"
-              ? "border-purple-600 bg-purple-50"
-              : "border-gray-200 hover:border-purple-300"
+            ? "border-purple-600 bg-purple-50"
+            : "border-gray-200 hover:border-purple-300"
             }`}
         >
           <h3 className="text-lg font-semibold mb-2">🔍 Recruiter Zone</h3>

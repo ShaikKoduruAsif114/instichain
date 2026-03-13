@@ -5,8 +5,9 @@
   "scripts": {
     "hardhat": "hardhat",
     "compile": "hardhat compile",
-    "deploy:amoy": "hardhat run scripts/deploy.js --network amoy",
     "deploy:localhost": "hardhat run scripts/deploy.js --network localhost",
+    "deploy:amoy": "hardhat run scripts/deploy.js --network polygonAmoy",
+    "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia",
     "node": "hardhat node",
     "test": "hardhat test"
   },

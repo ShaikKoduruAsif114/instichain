@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,9 +42,12 @@ import {
   verifyCertificate,
   getCertificateDetails,
   getCertificatesByOwner,
+  verifyAdminByWallet,
   Certificate,
+  AdminToken,
+  decodeVerificationHash,
 } from "@/lib/blockchain";
-import { getIPFSUrl } from "@/lib/ipfs";
+import { getIPFSUrl, isValidIPFSHash } from "@/lib/ipfs";
 import { parseCertificateIdFromUrl } from "@/lib/qrcode";
 
 interface VerificationResult {
@@ -54,17 +57,25 @@ interface VerificationResult {
   verifiedAt: string;
 }
 
+interface AdminVerificationResult {
+  adminToken: AdminToken;
+  isValid: boolean;
+  verifiedAt: string;
+}
+
 const VerifyCertificate = () => {
   const { certificateId: urlCertId } = useParams<{ certificateId?: string }>();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
 
   // Search state
-  const [searchType, setSearchType] = useState<"id" | "wallet">("id");
+  const [searchType, setSearchType] = useState<"hash" | "id" | "wallet">("hash");
   const [searchInput, setSearchInput] = useState("");
   const [walletCertificates, setWalletCertificates] = useState<number[]>([]);
 
   // Verification state
   const [verificationResult, setVerificationResult] = useState<VerificationResult | null>(null);
+  const [adminResult, setAdminResult] = useState<AdminVerificationResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,9 +83,21 @@ const VerifyCertificate = () => {
 
   useEffect(() => {
     if (urlCertId) {
+      setSearchType("id");
+      setSearchInput(urlCertId);
       handleVerifyCertificateId(urlCertId);
+    } else {
+      const walletFromUrl = searchParams.get("wallet");
+      if (walletFromUrl) {
+        setSearchType("wallet");
+        setSearchInput(walletFromUrl);
+        // We need to wait for the next tick for searchInput state to update before we call the handler, 
+        // or just pass it directly. Our handler uses searchInput directly, so let's refactor it slightly or call it with an arg.
+        // Actually, we can just abstract the search logic. 
+        setTimeout(() => executeWalletSearch(walletFromUrl), 0);
+      }
     }
-  }, [urlCertId]);
+  }, [urlCertId, searchParams]);
 
   // =================== VERIFICATION FUNCTIONS ===================
 
@@ -121,10 +144,67 @@ const VerifyCertificate = () => {
     await handleVerifyCertificateId(searchInput.trim());
   };
 
-  const handleSearchByWallet = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearchByWallet = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!searchInput.trim()) {
       setError("Please enter a wallet address");
+      return;
+    }
+    await executeWalletSearch(searchInput.trim());
+  };
+
+  const executeWalletSearch = async (walletAddress: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      setVerificationResult(null);
+      setAdminResult(null);
+
+      let foundAdmin = false;
+      try {
+        const { adminToken, isValid } = await verifyAdminByWallet(walletAddress);
+        if (adminToken && adminToken.adminName) {
+          setAdminResult({ adminToken, isValid, verifiedAt: new Date().toISOString() });
+          foundAdmin = true;
+        }
+      } catch (e) {
+        // Not an admin
+      }
+
+      const certIds = await getCertificatesByOwner(walletAddress);
+
+      if (certIds.length === 0) {
+        if (!foundAdmin) {
+          setError("No certificates or admin tokens found for this wallet address");
+        }
+        setWalletCertificates([]);
+        if (!foundAdmin) {
+          toast({ description: "No credentials found for this wallet" });
+        } else {
+          toast({ description: "✅ Club Admin found (but no student certificates)" });
+        }
+      } else {
+        setWalletCertificates(certIds);
+        toast({
+          description: foundAdmin ? `✅ Club Admin found AND ${certIds.length} certificate(s)` : `Found ${certIds.length} certificate(s) for this wallet`,
+        });
+      }
+    } catch (error: any) {
+      setError(error.message);
+      toast({
+        title: "Search Failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSearchByHash = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchInput.trim()) {
+      setError("Please enter a verification hash");
       return;
     }
 
@@ -132,25 +212,49 @@ const VerifyCertificate = () => {
       setLoading(true);
       setError(null);
       setVerificationResult(null);
+      setAdminResult(null);
+      setWalletCertificates([]);
 
-      const certIds = await getCertificatesByOwner(searchInput.trim());
+      const decoded = decodeVerificationHash(searchInput.trim());
+      if (!decoded) {
+        throw new Error("Invalid verification hash format");
+      }
 
-      if (certIds.length === 0) {
-        setError("No certificates found for this wallet address");
-        setWalletCertificates([]);
-        toast({
-          description: "No certificates found for this wallet",
-        });
-      } else {
-        setWalletCertificates(certIds);
-        toast({
-          description: `Found ${certIds.length} certificate(s) for this wallet`,
-        });
+      if (decoded.type === "cert") {
+        const id = parseInt(decoded.value, 10);
+        if (isNaN(id)) throw new Error("Invalid certificate ID in hash");
+
+        try {
+          const { certificate, isValid } = await verifyCertificate(id);
+          setVerificationResult({
+            certificateId: id,
+            certificate,
+            isValid,
+            verifiedAt: new Date().toISOString(),
+          });
+          toast({
+            description: isValid ? "✅ Certificate verified successfully" : "⚠️ Certificate is revoked",
+          });
+        } catch (e: any) {
+          throw new Error("Certificate not found or invalid: " + e.message);
+        }
+      } else if (decoded.type === "admin") {
+        try {
+          const { adminToken, isValid } = await verifyAdminByWallet(decoded.value);
+          if (adminToken && adminToken.adminName) {
+            setAdminResult({ adminToken, isValid, verifiedAt: new Date().toISOString() });
+            toast({ description: isValid ? "✅ Verified Club Admin" : "❌ Revoked Club Admin" });
+          } else {
+            throw new Error("No admin found for this hash");
+          }
+        } catch (e: any) {
+          throw new Error("Admin not found or invalid: " + e.message);
+        }
       }
     } catch (error: any) {
       setError(error.message);
       toast({
-        title: "Search Failed",
+        title: "Verification Failed",
         description: error.message,
         variant: "destructive",
       });
@@ -202,7 +306,7 @@ const VerifyCertificate = () => {
       <div className="max-w-4xl mx-auto space-y-8">
         {/* Header */}
         <div className="space-y-2 text-center">
-          <h1 className="text-4xl font-bold">Certificate Verification</h1>
+          <h1 className="text-4xl font-bold">Credential Verification</h1>
           <p className="text-muted-foreground">
             Verify blockchain credentials instantly
           </p>
@@ -211,22 +315,37 @@ const VerifyCertificate = () => {
         {/* Search Section */}
         <Card>
           <CardHeader>
-            <CardTitle>Search Certificate</CardTitle>
+            <CardTitle>Search Credential</CardTitle>
             <CardDescription>
-              {searchType === "id"
-                ? "Enter the certificate ID to verify"
-                : "Enter a wallet address to view all certificates"}
+              {searchType === "hash"
+                ? "Enter a verification hash (0x...)"
+                : searchType === "id"
+                  ? "Enter the certificate ID to verify"
+                  : "Enter a wallet address to view all credentials"}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Toggle Buttons */}
             <div className="flex gap-2">
               <Button
+                variant={searchType === "hash" ? "default" : "outline"}
+                onClick={() => {
+                  setSearchType("hash");
+                  setSearchInput("");
+                  setVerificationResult(null);
+                  setAdminResult(null);
+                  setWalletCertificates([]);
+                }}
+              >
+                Search by Hash
+              </Button>
+              <Button
                 variant={searchType === "id" ? "default" : "outline"}
                 onClick={() => {
                   setSearchType("id");
                   setSearchInput("");
                   setVerificationResult(null);
+                  setAdminResult(null);
                   setWalletCertificates([]);
                 }}
               >
@@ -238,6 +357,7 @@ const VerifyCertificate = () => {
                   setSearchType("wallet");
                   setSearchInput("");
                   setVerificationResult(null);
+                  setAdminResult(null);
                   setWalletCertificates([]);
                 }}
               >
@@ -248,17 +368,20 @@ const VerifyCertificate = () => {
             {/* Search Form */}
             <form
               onSubmit={
-                searchType === "id"
-                  ? handleSearchByCertificateId
-                  : handleSearchByWallet
+                searchType === "hash" ? handleSearchByHash :
+                  searchType === "id"
+                    ? handleSearchByCertificateId
+                    : handleSearchByWallet
               }
               className="flex gap-2"
             >
               <Input
                 placeholder={
-                  searchType === "id"
-                    ? "Enter certificate ID (e.g., 123)"
-                    : "Enter wallet address (0x...)"
+                  searchType === "hash"
+                    ? "Enter verification hash (0x...)"
+                    : searchType === "id"
+                      ? "Enter certificate ID (e.g., 123)"
+                      : "Enter wallet address (0x...)"
                 }
                 value={searchInput}
                 onChange={(e) => {
@@ -290,6 +413,47 @@ const VerifyCertificate = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Admin Result */}
+        {adminResult && (
+          <div className="space-y-6">
+            <div className="flex items-center gap-2 p-4 bg-green-50 border border-green-200 rounded-lg">
+              <CheckCircle className="w-6 h-6 text-green-600" />
+              <div>
+                <p className="font-semibold text-green-900">
+                  {adminResult.isValid ? "✅ Verified Club Admin" : "❌ Revoked Club Admin"}
+                </p>
+                <p className="text-sm text-green-700">This address belongs to an authorized issuer.</p>
+              </div>
+            </div>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Admin Credentials</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Admin Name</p>
+                      <p className="text-lg font-semibold">{adminResult.adminToken.adminName}</p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Club Affiliation</p>
+                      <p className="text-lg font-semibold">{adminResult.adminToken.clubName}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Issued Date</p>
+                      <p className="text-lg font-semibold">{formatDate(adminResult.adminToken.issueDate)}</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Verification Result */}
         {verificationResult && (
@@ -380,24 +544,38 @@ const VerifyCertificate = () => {
                 <CardTitle className="text-base">Certificate Document</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <a
-                  href={getIPFSUrl(verificationResult.certificate.ipfsHash)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-3 p-4 border rounded-lg hover:bg-muted transition-colors"
-                >
-                  <FileText className="w-6 h-6 text-primary" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">Certificate PDF</p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {verificationResult.certificate.ipfsHash}
+                {isValidIPFSHash(verificationResult.certificate.ipfsHash) ? (
+                  <>
+                    <a
+                      href={getIPFSUrl(verificationResult.certificate.ipfsHash)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 p-4 border rounded-lg hover:bg-muted transition-colors"
+                    >
+                      <FileText className="w-6 h-6 text-primary" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">Certificate PDF</p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {verificationResult.certificate.ipfsHash}
+                        </p>
+                      </div>
+                      <ExternalLink className="w-5 h-5 text-primary flex-shrink-0" />
+                    </a>
+                    <p className="text-xs text-muted-foreground">
+                      Click to view the certificate document stored on IPFS
                     </p>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-3 p-4 border rounded-lg bg-muted/50">
+                    <FileText className="w-6 h-6 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">No PDF Available</p>
+                      <p className="text-xs text-muted-foreground">
+                        This certificate was issued before PDF generation was enabled.
+                      </p>
+                    </div>
                   </div>
-                  <ExternalLink className="w-5 h-5 text-primary flex-shrink-0" />
-                </a>
-                <p className="text-xs text-muted-foreground">
-                  Click to view the certificate document stored on IPFS
-                </p>
+                )}
               </CardContent>
             </Card>
 

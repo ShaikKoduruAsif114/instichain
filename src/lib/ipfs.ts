@@ -6,50 +6,57 @@
  */
 
 /**
- * Upload a file to IPFS using web3.storage
- * Requires: Web3.Storage API key in environment
+ * Upload a file to IPFS using Pinata
+ * Requires: Pinata JWT in environment
  * 
  * Prerequisites:
- * 1. Install web3.storage: npm install web3.storage
- * 2. Get API key from https://web3.storage
- * 3. Set VITE_WEB3_STORAGE_KEY in .env
+ * 1. Get API key (JWT) from https://app.pinata.cloud/developers/api-keys
+ * 2. Set VITE_PINATA_JWT in .env
  * 
  * @param file File to upload (PDF, image, etc.)
  * @returns IPFS hash (CID)
  */
 export async function uploadToIPFS(file: File): Promise<string> {
-  const apiKey = import.meta.env.VITE_WEB3_STORAGE_KEY;
-  
-  if (!apiKey) {
+  const jwt = import.meta.env.VITE_PINATA_JWT;
+
+  if (!jwt) {
     throw new Error(
-      "Web3.Storage API key not found. " +
-      "Please set VITE_WEB3_STORAGE_KEY in your .env file.\n" +
-      "Get a free key at https://web3.storage"
+      "Pinata JWT not found. " +
+      "Please set VITE_PINATA_JWT in your .env file.\n" +
+      "Get a free key at https://app.pinata.cloud"
     );
   }
 
   try {
-    // Dynamically import web3.storage to avoid build issues
-    let Web3Storage: any;
-    try {
-      // @ts-ignore - web3.storage is an optional dependency
-      const module = await import("web3.storage");
-      Web3Storage = module.Web3Storage;
-    } catch (e) {
-      throw new Error(
-        "web3.storage module not found. Install with: npm install web3.storage"
-      );
-    }
-    
-    const client = new Web3Storage({ token: apiKey });
-    
-    console.log("📤 Uploading to IPFS:", file.name);
-    
-    // Upload file with metadata
-    const cid = await client.put([file], {
+    console.log("📤 Uploading to IPFS via Pinata:", file.name);
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const metadata = JSON.stringify({
       name: `certificate-${Date.now()}`,
-      maxRetries: 3,
     });
+    formData.append('pinataMetadata', metadata);
+
+    const options = JSON.stringify({
+      cidVersion: 1,
+    });
+    formData.append('pinataOptions', options);
+
+    const res = await fetch("https://api.pinata.cloud/pinning/pinFileToIPFS", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${jwt}`,
+      },
+      body: formData,
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to upload to Pinata: ${res.statusText}`);
+    }
+
+    const resData = await res.json();
+    const cid = resData.IpfsHash;
 
     console.log("✅ Upload successful! IPFS Hash:", cid);
     return cid;
@@ -64,8 +71,8 @@ export async function uploadToIPFS(file: File): Promise<string> {
  * @returns Full URL to access file from IPFS gateway
  */
 export function getIPFSUrl(ipfsHash: string): string {
-  // Using public IPFS gateway
-  return `https://w3s.link/ipfs/${ipfsHash}`;
+  // Using Pinata's public gateway (resolves instantly for files pinned to Pinata)
+  return `https://gateway.pinata.cloud/ipfs/${ipfsHash}`;
 }
 
 /**
@@ -92,7 +99,9 @@ export function getCloudflareIPFSUrl(ipfsHash: string): string {
  * @returns True if valid CID format
  */
 export function isValidIPFSHash(hash: string): boolean {
-  // CID v0 is 46 chars starting with Qm
-  // CID v1 is longer and starts with different encoding
-  return /^Qm[a-zA-Z0-9]{44}$/.test(hash) || /^bafy[a-z2-7]{55}$/.test(hash);
+  // CID v0 usually starts with Qm and is 46 chars
+  // CID v1 usually starts with bafy and is 59 chars, but can vary depending on encoding
+  // Just check if it's a reasonably long alphanumeric string starting with Qm or baf
+  if (!hash) return false;
+  return /^(Qm[a-zA-Z0-9]{44}|baf[a-zA-Z0-9]{50,60})$/.test(hash);
 }

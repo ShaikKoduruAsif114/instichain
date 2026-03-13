@@ -14,9 +14,9 @@ import { doc, setDoc } from "firebase/firestore";
  * This does NOT send or store private keys.
  */
 
-export default function ConnectWallet() {
+export default function ConnectWallet({ initialAddress }: { initialAddress?: string | null }) {
   const [loading, setLoading] = useState(false);
-  const [connectedAddress, setConnectedAddress] = useState<string | null>(null);
+  const [connectedAddress, setConnectedAddress] = useState<string | null>(initialAddress || null);
 
   const connect = async () => {
     if (!window.ethereum) {
@@ -70,10 +70,10 @@ export default function ConnectWallet() {
     <div className="space-y-2">
       <button
         onClick={connect}
-        disabled={loading}
-        className="px-4 py-2 rounded bg-blue-600 text-white"
+        disabled={loading || !!connectedAddress}
+        className={`px-4 py-2 rounded text-white ${connectedAddress ? 'bg-green-600 cursor-not-allowed' : 'bg-blue-600'}`}
       >
-        {loading ? "Connecting…" : "Connect with MetaMask"}
+        {loading ? "Connecting…" : connectedAddress ? "Wallet Linked ✓" : "Connect with MetaMask"}
       </button>
 
       {connectedAddress && (
