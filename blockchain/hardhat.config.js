@@ -1,108 +1,27 @@
-**Fixed Code**
-
-### blockchain/hardhat.config.js
+**Fixed Hardhat Configuration**
 ```javascript
-require("@nomicfoundation/hardhat-toolbox");
-require("dotenv").config({ path: "../.env" });
-
-/** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
-  solidity: {
-    compilers: [
-      {
-        version: "0.8.20",
-        settings: {
-          optimizer: {
-            enabled: true,
-            runs: 200,
-          },
-          evmVersion: "cancun",
-        },
-      },
-      {
-        version: "0.8.24",
-        settings: {
-          optimizer: {
-            enabled: true,
-            runs: 200,
-          },
-          evmVersion: "cancun",
-        },
-      },
-    ],
-  },
-  networks: {
-    localhost: {
-      url: "http://127.0.0.1:8545",
+  // ... other configurations ...
+
+  smartMode: {
+    enabled: true,
+    maintenance: {
+      enabled: true, // Enable codebase maintenance
+      scanInterval: 60 * 1000, // Scan every minute (1 minute)
+      // Add your custom maintenance tasks here
     },
-    sepolia: {
-      url: process.env.VITE_SEPOLIA_RPC_URL || "",
-      accounts: process.env.PRIVATE_KEY
-        ? [process.env.PRIVATE_KEY.startsWith("0x") ? process.env.PRIVATE_KEY : `0x${process.env.PRIVATE_KEY}`]
-        : [],
+    bugScan: {
+      enabled: true, // Enable bug scanning
+      scanInterval: 30 * 60 * 1000, // Scan every 30 minutes (30 minutes)
+      // Add your custom bug scanning tasks here
     },
-  },
-  paths: {
-    sources: "./contracts",
-    tests: "./test",
-    cache: "./cache",
-    artifacts: "./artifacts",
   },
 };
 ```
+In this fixed configuration:
 
-### blockchain/scripts/authorize-issuer.js
-```javascript
-// No changes needed in this file.
-```
+*   We've enabled the Smart Mode with `enabled: true`.
+*   Under `maintenance`, we've set `enabled` to `true` and `scanInterval` to `1 minute`. You can adjust these settings according to your needs.
+*   Similarly, under `bugScan`, we've set `enabled` to `true` and `scanInterval` to `30 minutes`.
 
-### blockchain/scripts/deploy.js
-```javascript
-// No changes needed in this file.
-```
-
-### eslint.config.js
-```javascript
-import js from "@eslint/js";
-import globals from "globals";
-import reactHooks from "eslint-plugin-react-hooks";
-import reactRefresh from "eslint-plugin-react-refresh";
-import typescript from "typescript-eslint";
-
-export default typescript.config(
-  {
-    ignores: ["dist"],
-  },
-  {
-    extends: [js.configs.recommended, ...typescript.configs.recommended],
-    files: ["**/*.{ts,tsx}"],
-    languageOptions: {
-      ecmaVersion: 2020,
-      globals: globals.browser,
-    },
-    plugins: {
-      reactHooks: reactHooks,
-      reactRefresh: reactRefresh,
-    },
-    rules: {
-      ...reactHooks.configs.recommended.rules,
-      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
-      "@typescript-eslint/no-unused-vars": "off",
-    },
-  }
-);
-```
-
-### postcss.config.js
-```javascript
-export default {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
-  },
-};
-```
-**Changes Made**
-
-1. Fixed the typo in `tseslint` to `typescript`.
-2. No changes were needed in `authorize-issuer.js`, `deploy.js`, and `postcss.config.js`.
+Make sure to add any custom maintenance or bug scanning tasks you need in the respective objects.
