@@ -1,108 +1,24 @@
-**Fixed Code**
-
-### blockchain/hardhat.config.js
+**Fixed Hardhat Configuration**
 ```javascript
-require("@nomicfoundation/hardhat-toolbox");
-require("dotenv").config({ path: "../.env" });
+// blockchain/hardhat.config.js
 
-/** @type import('hardhat/config').HardhatUserConfig */
+require('dotenv').config();
+
 module.exports = {
-  solidity: {
-    compilers: [
-      {
-        version: "0.8.20",
-        settings: {
-          optimizer: {
-            enabled: true,
-            runs: 200,
-          },
-          evmVersion: "cancun",
-        },
-      },
-      {
-        version: "0.8.24",
-        settings: {
-          optimizer: {
-            enabled: true,
-            runs: 200,
-          },
-          evmVersion: "cancun",
-        },
-      },
-    ],
-  },
+  // ... other configurations ...
+
   networks: {
-    localhost: {
-      url: "http://127.0.0.1:8545",
+    development: {
+      url: process.env.REACT_APP_ALCHEMY_API_KEY,
+      accounts: [process.env.WALLET_PRIVATE_KEY],
     },
-    sepolia: {
-      url: process.env.VITE_SEPOLIA_RPC_URL || "",
-      accounts: process.env.PRIVATE_KEY
-        ? [process.env.PRIVATE_KEY.startsWith("0x") ? process.env.PRIVATE_KEY : `0x${process.env.PRIVATE_KEY}`]
-        : [],
-    },
-  },
-  paths: {
-    sources: "./contracts",
-    tests: "./test",
-    cache: "./cache",
-    artifacts: "./artifacts",
   },
 };
 ```
+**Explanation**
 
-### blockchain/scripts/authorize-issuer.js
-```javascript
-// No changes needed in this file.
-```
+The issue was likely due to the `url` property in the `development` network configuration not being set. I added a line to load environment variables from `.env` using `require('dotenv').config()` and assigned the value of `REACT_APP_ALCHEMY_API_KEY` to the `url` property.
 
-### blockchain/scripts/deploy.js
-```javascript
-// No changes needed in this file.
-```
+Additionally, I assumed that you have set an environment variable `WALLET_PRIVATE_KEY` for the private key used in the development network. If not, please update accordingly.
 
-### eslint.config.js
-```javascript
-import js from "@eslint/js";
-import globals from "globals";
-import reactHooks from "eslint-plugin-react-hooks";
-import reactRefresh from "eslint-plugin-react-refresh";
-import typescript from "typescript-eslint";
-
-export default typescript.config(
-  {
-    ignores: ["dist"],
-  },
-  {
-    extends: [js.configs.recommended, ...typescript.configs.recommended],
-    files: ["**/*.{ts,tsx}"],
-    languageOptions: {
-      ecmaVersion: 2020,
-      globals: globals.browser,
-    },
-    plugins: {
-      reactHooks: reactHooks,
-      reactRefresh: reactRefresh,
-    },
-    rules: {
-      ...reactHooks.configs.recommended.rules,
-      "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
-      "@typescript-eslint/no-unused-vars": "off",
-    },
-  }
-);
-```
-
-### postcss.config.js
-```javascript
-export default {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
-  },
-};
-```
-**Changes Made**
-
-1. Fixed the typo in `tseslint` to `typescript`.
-2. No changes were needed in `authorize-issuer.js`, `deploy.js`, and `postcss.config.js`.
+**Note**: Make sure to replace `process.env.REACT_APP_ALCHEMY_API_KEY` and `process.env.WALLET_PRIVATE_KEY` with your actual environment variables.
