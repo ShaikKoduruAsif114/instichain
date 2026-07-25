@@ -1,125 +1,37 @@
-Here's an example of how you can write pytest tests for the fixed code:
+Here's an example of a simple pytest test function to cover the fix:
 
-```python
+```javascript
 # tests/test_hardhat_config.py
 
-import pytest
-from hardhat import HardhatUserConfig, networks
-from typing import Dict, List
+import { HardhatRuntimeEnvironment } from "hardhat/types";
+import { config } from "../blockchain/hardhat.config.js";
 
-def test_hardhat_config():
-    config = {
-        "solidity": {
-            "compilers": [
-                {
-                    "version": "0.8.20",
-                    "settings": {
-                        "optimizer": {
-                            "enabled": True,
-                            "runs": 200,
-                        },
-                        "evmVersion": "cancun",
-                    },
-                },
-                {
-                    "version": "0.8.24",
-                    "settings": {
-                        "optimizer": {
-                            "enabled": True,
-                            "runs": 200,
-                        },
-                        "evmVersion": "cancun",
-                    },
-                },
-            ],
-        },
-        "networks": {
-            "localhost": {
-                "url": "http://127.0.0.1:8545",
-            },
-            "sepolia": {
-                "url": "",
-                "accounts": [],
-            },
-        },
-    }
+describe("Hardhat Config", () => {
+  it("should have correct solidity compiler version", async () => {
+    const hre = new HardhatRuntimeEnvironment();
+    expect(config.solidity.compilers[0].version).toBe("0.8.20");
+  });
 
-    assert config["solidity"]["compilers"] == [
-        {
-            "version": "0.8.20",
-            "settings": {
-                "optimizer": {"enabled": True, "runs": 200},
-                "evmVersion": "cancun",
-            },
-        },
-        {
-            "version": "0.8.24",
-            "settings": {
-                "optimizer": {"enabled": True, "runs": 200},
-                "evmVersion": "cancun",
-            },
-        },
-    ]
+  it("should have correct sepolia network settings", async () => {
+    const hre = new HardhatRuntimeEnvironment();
+    expect(hre.networks.sepolia.url).toBe(process.env.VITE_SEPOLIA_RPC_URL);
+    expect(hre.networks.sepolia.accounts.length).toBeGreaterThan(0);
+  });
 
-    assert config["networks"]["localhost"] == {
-        "url": "http://127.0.0.1:8545",
-    }
-
-    assert config["networks"]["sepolia"] == {
-        "url": "",
-        "accounts": [],
-    }
-
-def test_hardhat_config_typo_fix():
-    with pytest.raises(KeyError):
-        HardhatUserConfig(solidity={"compilers": []})
-
-def test_hardhat_config_networks():
-    config = {
-        "networks": {
-            "localhost": {"url": "http://127.0.0.1:8545"},
-            "sepolia": {"url": "", "accounts": ["private_key"]},
-        },
-    }
-
-    assert config["networks"]["localhost"] == {
-        "url": "http://127.0.0.1:8545",
-    }
-
-    assert config["networks"]["sepolia"] == {
-        "url": "",
-        "accounts": ["private_key"],
-    }
-
-def test_hardhat_config_paths():
-    config = {
-        "paths": {
-            "sources": "./contracts",
-            "tests": "./test",
-            "cache": "./cache",
-            "artifacts": "./artifacts",
-        },
-    }
-
-    assert config["paths"] == {
-        "sources": "./contracts",
-        "tests": "./test",
-        "cache": "./cache",
-        "artifacts": "./artifacts",
-    }
+  it("should have correct paths settings", async () => {
+    const hre = new HardhatRuntimeEnvironment();
+    expect(config.paths.sources).toBe("./contracts");
+    expect(config.paths.tests).toBe("./test");
+    expect(config.paths.cache).toBe("./cache");
+    expect(config.paths.artifacts).toBe("./artifacts");
+  });
+});
 ```
 
-This test module covers the following scenarios:
+This test suite covers the following scenarios:
 
-1.  `test_hardhat_config`: Verifies that the hardhat configuration is correctly defined with the correct solidity compilers and networks.
-2.  `test_hardhat_config_typo_fix`: Tests that a `KeyError` is raised when trying to access a non-existent key in the hardhat configuration.
-3.  `test_hardhat_config_networks`: Verifies that the network configurations are correctly defined with the correct URL and accounts.
-4.  `test_hardhat_config_paths`: Tests that the paths configuration is correctly defined.
+1. Verifies that the solidity compiler version is set to "0.8.20".
+2. Checks that the sepolia network settings are correct, including the RPC URL and accounts.
+3. Confirms that the paths settings match the expected values.
 
-You can run these tests using the following command:
-
-```bash
-pytest tests/test_hardhat_config.py
-```
-
-This will execute all the test functions in the module and report any failures or errors.
+Note: Make sure to replace `process.env.VITE_SEPOLIA_RPC_URL` with your actual environment variable value if you're using it in your `.env` file.
