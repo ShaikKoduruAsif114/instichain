@@ -9,7 +9,7 @@
  * - Fetch student certificates
  */
 
-import { ethers, BrowserProvider, Contract } from "ethers";
+import { ethers, BrowserProvider, JsonRpcProvider, Contract } from "ethers";
 
 // =================== TYPES ===================
 
@@ -27,7 +27,16 @@ export interface CertificateWithId extends Certificate {
   certificateId: number;
 }
 
-// =================== CONTRACT CONFIGURATION ===================
+// =================== NETWORK CONFIGURATION ===================
+
+// Expected chain and RPC endpoint are environment-configurable so the same
+// build can target Hardhat local (default), a testnet, or a mainnet fork.
+export const EXPECTED_CHAIN_ID = Number(import.meta.env.VITE_EXPECTED_CHAIN_ID ?? 31337);
+export const RPC_URL = import.meta.env.VITE_RPC_URL ?? "http://127.0.0.1:8545";
+export const NETWORK_NAME = import.meta.env.VITE_NETWORK_NAME ?? "Hardhat Localhost";
+
+/** Explicit verification outcome mirrored from CertificateRegistry.VerificationStatus. */
+export type VerificationStatus = "NOT_FOUND" | "VALID" | "REVOKED" | "ERROR";
 
 // ABI for CertificateRegistry - minimal interface with key functions
 const CERTIFICATE_REGISTRY_ABI = [
@@ -59,7 +68,8 @@ const CERTIFICATE_REGISTRY_ABI = [
     stateMutability: "nonpayable",
     type: "function",
   },
-  // Verify Certificate
+  // Verify Certificate — returns (Certificate, uint8 status) where status is
+  // 0 = NOT_FOUND, 1 = VALID, 2 = REVOKED (CertificateRegistry.VerificationStatus)
   {
     inputs: [{ internalType: "uint256", name: "_certificateId", type: "uint256" }],
     name: "verifyCertificate",
@@ -78,7 +88,7 @@ const CERTIFICATE_REGISTRY_ABI = [
         name: "certificate",
         type: "tuple",
       },
-      { internalType: "bool", name: "isValid", type: "bool" },
+      { internalType: "uint8", name: "status", type: "uint8" },
     ],
     stateMutability: "view",
     type: "function",
@@ -249,15 +259,17 @@ export async function connectWallet() {
     const signer = await provider.getSigner();
     const address = accounts[0];
 
-    // Verify we're on the local Hardhat network (chain ID 31337)
+    // Ensure we're on the expected (environment-configured) network.
     const network = await provider.getNetwork();
-    if (network.chainId !== 31337n) {
-      console.warn("⚠️ You are not on the Hardhat local network. Please switch networks.");
+    if (Number(network.chainId) !== EXPECTED_CHAIN_ID) {
+      console.warn(
+        `⚠️ Wallet is on chain ${network.chainId}, expected ${EXPECTED_CHAIN_ID}. Attempting to switch.`
+      );
       // Attempt to switch network
       try {
         await window.ethereum.request({
           method: "wallet_switchEthereumChain",
-          params: [{ chainId: "0x7A69" }], // 31337 in hex
+          params: [{ chainId: "0x" + EXPECTED_CHAIN_ID.toString(16) }],
         });
       } catch (switchError: any) {
         if (switchError.code === 4902) {
@@ -266,13 +278,17 @@ export async function connectWallet() {
             method: "wallet_addEthereumChain",
             params: [
               {
-                chainId: "0x7A69",
-                chainName: "Hardhat Localhost",
-                rpcUrls: ["http://127.0.0.1:8545"],
+                chainId: "0x" + EXPECTED_CHAIN_ID.toString(16),
+                chainName: NETWORK_NAME,
+                rpcUrls: [RPC_URL],
                 nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
               },
             ],
           });
+        } else {
+          throw new Error(
+            `Please switch your wallet to ${NETWORK_NAME} (chain ID ${EXPECTED_CHAIN_ID}).`
+          );
         }
       }
     }
@@ -306,9 +322,16 @@ export async function getCurrentWalletAddress(): Promise<string | null> {
 // =================== CONTRACT INTERACTION ===================
 
 /**
- * Get contract instance
+ * Get contract instance.
+ *
+ * Read-only access must work WITHOUT a browser wallet (public verification
+ * page). Strategy:
+ *   1. If a signer is passed, attach it (write operations).
+ *   2. Otherwise prefer an injected wallet provider when present.
+ *   3. Fall back to a plain JSON-RPC provider (VITE_RPC_URL) so verifiers
+ *      without MetaMask can still read on-chain state.
+ *
  * @param signer Ethers signer for write operations (optional)
- * @returns Contract instance
  */
 export async function getContract(signer?: any) {
   if (!CONTRACT_ADDRESS) {
@@ -321,12 +344,21 @@ export async function getContract(signer?: any) {
     );
   }
 
-  const provider = new BrowserProvider(window.ethereum);
-  const instance = signer
-    ? new Contract(CONTRACT_ADDRESS, CERTIFICATE_REGISTRY_ABI, signer)
-    : new Contract(CONTRACT_ADDRESS, CERTIFICATE_REGISTRY_ABI, provider);
+  if (signer) {
+    return new Contract(CONTRACT_ADDRESS, CERTIFICATE_REGISTRY_ABI, signer);
+  }
 
-  return instance;
+  if (typeof window !== "undefined" && window.ethereum) {
+    try {
+      const provider = new BrowserProvider(window.ethereum);
+      return new Contract(CONTRACT_ADDRESS, CERTIFICATE_REGISTRY_ABI, provider);
+    } catch {
+      // fall through to RPC provider
+    }
+  }
+
+  const rpcProvider = new JsonRpcProvider(RPC_URL);
+  return new Contract(CONTRACT_ADDRESS, CERTIFICATE_REGISTRY_ABI, rpcProvider);
 }
 
 /**
@@ -429,31 +461,53 @@ export async function batchIssueCertificates(
 }
 
 /**
- * Verify a certificate
+ * Verify a certificate by ID.
+ *
+ * Maps the on-chain VerificationStatus enum explicitly so a caller can never
+ * confuse "not found" with "revoked" or with a transport error. `isValid` is
+ * true ONLY for status VALID — never for NOT_FOUND or transport failures.
+ *
  * @param certificateId ID of the certificate to verify
- * @returns Certificate data and validity status
  */
 export async function verifyCertificate(
   certificateId: number
-): Promise<{ certificate: Certificate; isValid: boolean }> {
+): Promise<{ certificate: Certificate | null; status: VerificationStatus; isValid: boolean }> {
+  const emptyCert: Certificate = {
+    studentName: "",
+    course: "",
+    issuer: "",
+    ipfsHash: "",
+    issueDate: 0,
+    valid: false,
+    issuerAddress: "",
+  };
+
   try {
     const contract = await getContract();
     const result = await contract.verifyCertificate(certificateId);
 
-    return {
-      certificate: {
-        studentName: result[0].studentName,
-        course: result[0].course,
-        issuer: result[0].issuer,
-        ipfsHash: result[0].ipfsHash,
-        issueDate: Number(result[0].issueDate),
-        valid: result[0].valid,
-        issuerAddress: result[0].issuerAddress,
-      },
-      isValid: result[1],
-    };
+    // On-chain enum: 0 = NOT_FOUND, 1 = VALID, 2 = REVOKED
+    const statusNum = Number(result[1]);
+    const status: VerificationStatus =
+      statusNum === 1 ? "VALID" : statusNum === 2 ? "REVOKED" : "NOT_FOUND";
+
+    const certificate: Certificate =
+      status === "NOT_FOUND"
+        ? emptyCert
+        : {
+            studentName: result[0].studentName,
+            course: result[0].course,
+            issuer: result[0].issuer,
+            ipfsHash: result[0].ipfsHash,
+            issueDate: Number(result[0].issueDate),
+            valid: result[0].valid,
+            issuerAddress: result[0].issuerAddress,
+          };
+
+    return { certificate, status, isValid: status === "VALID" };
   } catch (error: any) {
-    throw new Error(`Failed to verify certificate: ${error.message}`);
+    // Transport/RPC failure must not be interpretable as "invalid certificate".
+    return { certificate: null, status: "ERROR", isValid: false };
   }
 }
 

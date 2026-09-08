@@ -1,0 +1,148 @@
+{
+  "benchmark": "instichain-gas-individual-vs-batch",
+  "version": 1,
+  "measuredAt": "2026-09-08T23:19:00.123Z",
+  "network": "hardhat",
+  "chainId": 31337,
+  "solidity": "0.8.28 (cancun, optimizer 200 runs)",
+  "hardhatVersion": "2.28.6",
+  "openzeppelinVersion": "5.6.1",
+  "gasPriceBasis": "gasUsed from transaction receipts (measured, not estimated)",
+  "contractAddress": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+  "certificatesIssued": 386,
+  "note": "Hardhat in-process network has zero base fee; these are GAS units, which are network-independent. Execution times are local-machine and not representative of public-network latency.",
+  "results": [
+    {
+      "batchSize": 1,
+      "individual": {
+        "transactionCount": 1,
+        "totalGas": 310816,
+        "gasPerCertificate": 310816,
+        "executionTimeMs": 35,
+        "avgTimePerTxMs": 35,
+        "success": true
+      },
+      "batch": {
+        "transactionCount": 1,
+        "totalGas": 319195,
+        "gasPerCertificate": 319195,
+        "executionTimeMs": 11,
+        "success": true
+      },
+      "comparison": {
+        "absoluteGasSavings": -8379,
+        "percentageGasSavings": -0.026958071656542737
+      }
+    },
+    {
+      "batchSize": 10,
+      "individual": {
+        "transactionCount": 10,
+        "totalGas": 3136148,
+        "gasPerCertificate": 313614.8,
+        "executionTimeMs": 72,
+        "avgTimePerTxMs": 7.2,
+        "success": true
+      },
+      "batch": {
+        "transactionCount": 1,
+        "totalGas": 2897602,
+        "gasPerCertificate": 289760.2,
+        "executionTimeMs": 57,
+        "success": true
+      },
+      "comparison": {
+        "absoluteGasSavings": 238546,
+        "percentageGasSavings": 0.07606337456012913
+      }
+    },
+    {
+      "batchSize": 25,
+      "individual": {
+        "transactionCount": 25,
+        "totalGas": 7840556,
+        "gasPerCertificate": 313622.24,
+        "executionTimeMs": 167,
+        "avgTimePerTxMs": 6.68,
+        "success": true
+      },
+      "batch": {
+        "transactionCount": 1,
+        "totalGas": 7195682,
+        "gasPerCertificate": 287827.28,
+        "executionTimeMs": 126,
+        "success": true
+      },
+      "comparison": {
+        "absoluteGasSavings": 644874,
+        "percentageGasSavings": 0.0822485038050873
+      }
+    },
+    {
+      "batchSize": 50,
+      "individual": {
+        "transactionCount": 50,
+        "totalGas": 15681208,
+        "gasPerCertificate": 313624.16,
+        "executionTimeMs": 420,
+        "avgTimePerTxMs": 8.4,
+        "success": true
+      },
+      "batch": {
+        "transactionCount": 1,
+        "totalGas": 14359655,
+        "gasPerCertificate": 287193.1,
+        "executionTimeMs": 239,
+        "success": true
+      },
+      "comparison": {
+        "absoluteGasSavings": 1321553,
+        "percentageGasSavings": 0.08427622412763103
+      }
+    },
+    {
+      "batchSize": 100,
+      "individual": {
+        "transactionCount": 100,
+        "totalGas": 31362584,
+        "gasPerCertificate": 313625.84,
+        "executionTimeMs": 636,
+        "avgTimePerTxMs": 6.36,
+        "success": true
+      },
+      "batch": {
+        "transactionCount": 2,
+        "totalGas": 28719358,
+        "gasPerCertificate": 287193.58,
+        "executionTimeMs": 507,
+        "success": true
+      },
+      "comparison": {
+        "absoluteGasSavings": 2643226,
+        "percentageGasSavings": 0.08427959890039671
+      }
+    },
+    {
+      "batchSize": 200,
+      "individual": {
+        "transactionCount": 200,
+        "totalGas": 62726476,
+        "gasPerCertificate": 313632.38,
+        "executionTimeMs": 2314,
+        "avgTimePerTxMs": 11.57,
+        "success": true
+      },
+      "batch": {
+        "transactionCount": 4,
+        "totalGas": 57438668,
+        "gasPerCertificate": 287193.34,
+        "executionTimeMs": 1779,
+        "success": true
+      },
+      "comparison": {
+        "absoluteGasSavings": 5287808,
+        "percentageGasSavings": 0.08429945913110115
+      }
+    }
+  ]
+}

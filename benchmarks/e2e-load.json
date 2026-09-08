@@ -1,0 +1,93 @@
+{
+  "benchmark": "instichain-e2e-load",
+  "version": 1,
+  "measuredAt": "2026-09-08T23:21:10.465Z",
+  "environment": "local Hardhat in-process network — controlled benchmark, NOT production scale",
+  "network": "hardhat",
+  "chainId": 31337,
+  "maxBatchSize": 50,
+  "method": "batch issuance (50/tx) + full verification pass + 5% revocation sample; gas from receipts; timing via Date.now()",
+  "results": [
+    {
+      "scale": 100,
+      "issued": {
+        "certificates": 100,
+        "transactions": 2,
+        "totalTimeMs": 619,
+        "totalGas": 28745454,
+        "gasPerCertificate": 287454.54,
+        "issuanceSuccessRate": 1,
+        "throughputCertsPerSec": 161.6
+      },
+      "verified": {
+        "attempts": 100,
+        "successCount": 100,
+        "failureCount": 0,
+        "successRate": 1,
+        "totalTimeMs": 71,
+        "perCertificateMs": 0.71
+      },
+      "revoked": {
+        "sampled": 5,
+        "successCount": 5,
+        "successRate": 1,
+        "totalTimeMs": 10,
+        "postRevokeStatusCheck": "all sampled certificates read REVOKED (status=2)"
+      }
+    },
+    {
+      "scale": 500,
+      "issued": {
+        "certificates": 500,
+        "transactions": 10,
+        "totalTimeMs": 4049,
+        "totalGas": 143746586,
+        "gasPerCertificate": 287493.17,
+        "issuanceSuccessRate": 1,
+        "throughputCertsPerSec": 123.5
+      },
+      "verified": {
+        "attempts": 500,
+        "successCount": 500,
+        "failureCount": 0,
+        "successRate": 1,
+        "totalTimeMs": 474,
+        "perCertificateMs": 0.948
+      },
+      "revoked": {
+        "sampled": 25,
+        "successCount": 25,
+        "successRate": 1,
+        "totalTimeMs": 57,
+        "postRevokeStatusCheck": "all sampled certificates read REVOKED (status=2)"
+      }
+    },
+    {
+      "scale": 1000,
+      "issued": {
+        "certificates": 1000,
+        "transactions": 20,
+        "totalTimeMs": 9917,
+        "totalGas": 287494552,
+        "gasPerCertificate": 287494.55,
+        "issuanceSuccessRate": 1,
+        "throughputCertsPerSec": 100.8
+      },
+      "verified": {
+        "attempts": 1000,
+        "successCount": 1000,
+        "failureCount": 0,
+        "successRate": 1,
+        "totalTimeMs": 923,
+        "perCertificateMs": 0.923
+      },
+      "revoked": {
+        "sampled": 50,
+        "successCount": 50,
+        "successRate": 1,
+        "totalTimeMs": 116,
+        "postRevokeStatusCheck": "all sampled certificates read REVOKED (status=2)"
+      }
+    }
+  ]
+}

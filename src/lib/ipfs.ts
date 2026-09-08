@@ -105,3 +105,32 @@ export function isValidIPFSHash(hash: string): boolean {
   if (!hash) return false;
   return /^(Qm[a-zA-Z0-9]{44}|baf[a-zA-Z0-9]{50,60})$/.test(hash);
 }
+
+// =================== NO-DOCUMENT SENTINEL ===================
+
+/**
+ * Deterministic 32-bit FNV-1a hash (hex, zero-padded to 8 chars).
+ */
+function fnv1aHex(str: string, seed: number): string {
+  let h = seed >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0");
+}
+
+/**
+ * Deterministic sentinel for certificates issued WITHOUT a stored document
+ * (e.g. Pinata credentials not configured, or PDF generation failed).
+ *
+ * It satisfies the on-chain CID validation rules (starts with "b", 40-128
+ * chars) so issuance still succeeds, but it is NOT a content address and must
+ * never be presented as one: `isValidIPFSHash` returns false for it, so the
+ * verification UI shows "No PDF Available" instead of a dead gateway link.
+ */
+export function placeholderCIDFor(seed: string): string {
+  const streams = [0x811c9dc5, 0x01020304, 0x0badf00d, 0x7f1e35c2, 0x9e3779b9, 0x55aa00ff];
+  const hex = streams.map((s) => fnv1aHex(`${seed}:${s}`, s)).join(""); // 48 hex chars
+  return ("b0" + hex).slice(0, 128); // "b0" + 48 = 50 chars
+}

@@ -1,27 +1,40 @@
-**Fixed Hardhat Configuration**
-```javascript
-module.exports = {
-  // ... other configurations ...
+﻿/**
+ * Hardhat configuration for InstiChain CertificateRegistry
+ */
+require("@nomicfoundation/hardhat-toolbox");
+require("dotenv").config();
 
-  smartMode: {
-    enabled: true,
-    maintenance: {
-      enabled: true, // Enable codebase maintenance
-      scanInterval: 60 * 1000, // Scan every minute (1 minute)
-      // Add your custom maintenance tasks here
-    },
-    bugScan: {
-      enabled: true, // Enable bug scanning
-      scanInterval: 30 * 60 * 1000, // Scan every 30 minutes (30 minutes)
-      // Add your custom bug scanning tasks here
+const PRIVATE_KEY = process.env.PRIVATE_KEY;
+const accounts = PRIVATE_KEY ? [PRIVATE_KEY] : [];
+
+module.exports = {
+  solidity: {
+    version: "0.8.28",
+    settings: {
+      evmVersion: "cancun",
+      optimizer: {
+        enabled: true,
+        runs: 200,
+      },
     },
   },
+  networks: {
+    hardhat: {
+      initialBaseFeePerGas: 0,
+    },
+    localhost: {
+      url: "http://127.0.0.1:8545",
+    },
+    polygonAmoy: {
+      url: process.env.AMOY_RPC || "https://rpc-amoy.polygon.technology",
+      accounts,
+    },
+    sepolia: {
+      url: process.env.SEPOLIA_RPC || "https://sepolia.gateway.tenderly.co",
+      accounts,
+    },
+  },
+  mocha: {
+    timeout: 120000,
+  },
 };
-```
-In this fixed configuration:
-
-*   We've enabled the Smart Mode with `enabled: true`.
-*   Under `maintenance`, we've set `enabled` to `true` and `scanInterval` to `1 minute`. You can adjust these settings according to your needs.
-*   Similarly, under `bugScan`, we've set `enabled` to `true` and `scanInterval` to `30 minutes`.
-
-Make sure to add any custom maintenance or bug scanning tasks you need in the respective objects.

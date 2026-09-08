@@ -1,0 +1,102 @@
+{
+  "benchmark": "instichain-verification-latency",
+  "version": 1,
+  "measuredAt": "2026-09-08T23:20:46.659Z",
+  "environment": "local Hardhat in-process network (NOT production Internet latency)",
+  "network": "hardhat",
+  "chainId": 31337,
+  "datasetSize": 1000,
+  "datasetIssuance": {
+    "totalTimeMs": 8464,
+    "totalGas": 287515548,
+    "gasPerCertificate": 287515.548,
+    "batchCount": 20
+  },
+  "method": "per-call latency via process.hrtime.bigint(); blockchain lookup = raw eth_call; full verification = ethers contract.verifyCertificate; app processing = difference (ABI decode + struct materialization)",
+  "results": [
+    {
+      "sampleSize": 100,
+      "expectedStatus": "VALID",
+      "successCount": 100,
+      "failureCount": 0,
+      "successRate": 1,
+      "blockchainLookup": {
+        "count": 100,
+        "meanMs": 0.772,
+        "minMs": 0.559,
+        "maxMs": 1.76,
+        "p50Ms": 0.708,
+        "p90Ms": 0.996,
+        "p95Ms": 1.056,
+        "p99Ms": 1.308
+      },
+      "fullVerification": {
+        "count": 100,
+        "meanMs": 1.981,
+        "minMs": 1.323,
+        "maxMs": 5.836,
+        "p50Ms": 1.886,
+        "p90Ms": 2.326,
+        "p95Ms": 2.513,
+        "p99Ms": 4.103
+      },
+      "appProcessingMeanMs": 1.209
+    },
+    {
+      "sampleSize": 500,
+      "expectedStatus": "VALID",
+      "successCount": 500,
+      "failureCount": 0,
+      "successRate": 1,
+      "blockchainLookup": {
+        "count": 500,
+        "meanMs": 0.669,
+        "minMs": 0.326,
+        "maxMs": 8.319,
+        "p50Ms": 0.624,
+        "p90Ms": 0.866,
+        "p95Ms": 0.977,
+        "p99Ms": 1.333
+      },
+      "fullVerification": {
+        "count": 500,
+        "meanMs": 1.676,
+        "minMs": 0.852,
+        "maxMs": 9.652,
+        "p50Ms": 1.588,
+        "p90Ms": 2.151,
+        "p95Ms": 2.369,
+        "p99Ms": 5.033
+      },
+      "appProcessingMeanMs": 1.007
+    },
+    {
+      "sampleSize": 1000,
+      "expectedStatus": "VALID",
+      "successCount": 1000,
+      "failureCount": 0,
+      "successRate": 1,
+      "blockchainLookup": {
+        "count": 1000,
+        "meanMs": 0.669,
+        "minMs": 0.321,
+        "maxMs": 16.964,
+        "p50Ms": 0.589,
+        "p90Ms": 0.831,
+        "p95Ms": 0.923,
+        "p99Ms": 1.41
+      },
+      "fullVerification": {
+        "count": 1000,
+        "meanMs": 1.624,
+        "minMs": 0.805,
+        "maxMs": 31.172,
+        "p50Ms": 1.515,
+        "p90Ms": 2.023,
+        "p95Ms": 2.272,
+        "p99Ms": 3.007
+      },
+      "appProcessingMeanMs": 0.955
+    }
+  ]
+}

@@ -5,9 +5,11 @@
  * Run this AFTER deploying the contract, using the OWNER account (Hardhat account #0).
  * 
  * Usage:
+ *   $env:ISSUER_ADDRESS='0x...'; $env:ADMIN_NAME='Alice'; $env:CLUB_NAME='Robotics Club'
  *   npx hardhat run scripts/authorize-issuer.js --network localhost
  * 
- * Set ISSUER_ADDRESS in the script to the wallet address you want to authorize.
+ * ISSUER_ADDRESS is required; ADMIN_NAME and CLUB_NAME are optional
+ * (defaults: "Head of Club" / "InstiChain Club").
  */
 
 const hre = require("hardhat");
@@ -16,6 +18,9 @@ const path = require("path");
 
 // ✏️ CHANGE THIS to the MetaMask wallet address of the Head/Issuer user
 const ISSUER_ADDRESS = process.env.ISSUER_ADDRESS || "";
+// ✏️ Optional: admin display name and club name recorded on the admin NFT
+const ADMIN_NAME = process.env.ADMIN_NAME || "Head of Club";
+const CLUB_NAME = process.env.CLUB_NAME || "InstiChain Club";
 
 async function main() {
     if (!ISSUER_ADDRESS || ISSUER_ADDRESS === "") {
@@ -53,8 +58,12 @@ async function main() {
         return;
     }
 
-    // Authorize
-    const tx = await CertificateRegistry.authorizeIssuer(ISSUER_ADDRESS);
+    // Authorize (contract requires admin name + club name for the Admin NFT)
+    const tx = await CertificateRegistry.authorizeIssuer(
+        ISSUER_ADDRESS,
+        ADMIN_NAME,
+        CLUB_NAME
+    );
     await tx.wait();
 
     console.log("✅ Issuer authorized successfully!");

@@ -37,7 +37,7 @@ import {
   issueCertificate as issueCertificateOnChain,
   generateVerificationHash,
 } from "@/lib/blockchain";
-import { uploadToIPFS, getIPFSUrl } from "@/lib/ipfs";
+import { uploadToIPFS, getIPFSUrl, placeholderCIDFor } from "@/lib/ipfs";
 import { generateSampleCertificatePDF } from "@/lib/pdfGenerator";
 import { generateCertificateQRCode, downloadQRCode } from "@/lib/qrcode";
 import { doc, setDoc, collection, getDocs, query, where, updateDoc } from "firebase/firestore";
@@ -172,21 +172,28 @@ const HeadIssuerDashboard = () => {
 
     setIssuanceLoading(true);
     try {
-      // Auto-generate PDF if not provided
-      let ipfsHash = "no-pdf";
-      if (formData.pdfFile) {
-        toast({ description: "📤 Uploading PDF to IPFS..." });
-        ipfsHash = await uploadToIPFS(formData.pdfFile);
-      } else {
-        toast({ description: "📄 Generating certificate PDF..." });
-        const generatedPdf = await generateSampleCertificatePDF({
-          studentName: formData.studentName,
-          courseName: formData.certificateTitle,
-          issuerName: currentUser.name,
-          date: new Date().toISOString(),
-        });
-        toast({ description: "📤 Uploading certificate PDF to IPFS..." });
-        ipfsHash = await uploadToIPFS(generatedPdf);
+      // Attach a PDF when possible; if generation/upload fails (e.g. Pinata
+      // not configured), fall back to an explicit no-document sentinel instead
+      // of blocking issuance or writing an invalid CID (which reverts on-chain).
+      let ipfsHash = placeholderCIDFor(`head:${formData.studentWalletAddress}:${formData.certificateTitle}`);
+      try {
+        if (formData.pdfFile) {
+          toast({ description: "📤 Uploading PDF to IPFS..." });
+          ipfsHash = await uploadToIPFS(formData.pdfFile);
+        } else {
+          toast({ description: "📄 Generating certificate PDF..." });
+          const generatedPdf = await generateSampleCertificatePDF({
+            studentName: formData.studentName,
+            courseName: formData.certificateTitle,
+            issuerName: currentUser.name,
+            date: new Date().toISOString(),
+          });
+          toast({ description: "📤 Uploading certificate PDF to IPFS..." });
+          ipfsHash = await uploadToIPFS(generatedPdf);
+        }
+      } catch (pdfErr: any) {
+        console.warn("PDF pipeline failed, issuing without document:", pdfErr.message);
+        toast({ description: "⚠️ Document upload unavailable — issuing without PDF" });
       }
 
       const certificateData = {

@@ -45,7 +45,7 @@ import {
   batchIssueCertificates,
   generateVerificationHash
 } from "@/lib/blockchain";
-import { uploadToIPFS, getIPFSUrl } from "@/lib/ipfs";
+import { uploadToIPFS, getIPFSUrl, placeholderCIDFor } from "@/lib/ipfs";
 import { generateSampleCertificatePDF } from "@/lib/pdfGenerator";
 import { generateCertificateQRCode, downloadQRCode } from "@/lib/qrcode";
 import { doc, setDoc, collection, getDocs, onSnapshot, updateDoc, query, where } from "firebase/firestore";
@@ -144,8 +144,10 @@ const IssuerDashboard = () => {
     try {
       toast({ description: "⛓️ Minting certificate on blockchain..." });
 
-      // Generate a sample PDF for the student
-      let ipfsHashToUse = `proposal-${pending.eventId}`;
+      // Generate a sample PDF for the student; if generation/upload fails
+      // (e.g. Pinata not configured), record an explicit no-document sentinel
+      // instead of an invalid CID (which would revert on-chain).
+      let ipfsHashToUse = placeholderCIDFor(`pending:${pending.eventId}:${pending.studentId}`);
       try {
         toast({ description: "📄 Generating certificate PDF..." });
         const pdf = await generateSampleCertificatePDF({
@@ -219,7 +221,7 @@ const IssuerDashboard = () => {
           const h = await uploadToIPFS(pdf);
           hashes.push(h);
         } catch {
-          hashes.push(`proposal-${p.eventId}`);
+          hashes.push(placeholderCIDFor(`pending:${p.eventId}:${p.studentId}`));
         }
       }
 

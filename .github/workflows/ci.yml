@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  contract:
+    name: Smart contracts (compile, test, coverage)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: blockchain
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: blockchain/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile contracts
+        run: npm run compile
+
+      - name: Run contract tests
+        run: npm test
+
+      - name: Coverage
+        run: npx hardhat coverage --testfiles "test"
+
+      - name: Gas benchmark (smoke — size 1..200 must complete)
+        run: npx hardhat run scripts/benchmark-gas.js
+
+      - name: Upload benchmark artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            benchmarks/gas-benchmark.json
+            benchmarks/gas-benchmark.csv
+          if-no-files-found: warn
+
+  frontend:
+    name: Frontend (typecheck, lint, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc -b --noEmit
+
+      - name: Lint (advisory — baseline debt tracked in reports/)
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Production build
+        run: npm run build
+        env:
+          # Build-time placeholder config; real values are injected per-environment.
+          VITE_FIREBASE_API_KEY: ci-placeholder
+          VITE_FIREBASE_PROJECT_ID: ci-placeholder
+          VITE_FIREBASE_APP_ID: ci-placeholder
+          VITE_PINATA_JWT: ci-placeholder
+
+  repo-integrity:
+    name: Repository integrity (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install pytest
+        run: pip install pytest
+
+      - name: Run integrity tests
+        run: python -m pytest tests/ -v

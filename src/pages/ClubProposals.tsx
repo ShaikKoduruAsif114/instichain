@@ -20,7 +20,7 @@ import { getUsersByIds, voteOnProposalForUser, issueCertificateForApprovedUser }
 import ConnectWallet from "@/components/ConnectWallet";
 import { Wallet } from "lucide-react";
 import { issueCertificate as issueCertificateOnChain } from "@/lib/blockchain";
-import { uploadToIPFS } from "@/lib/ipfs";
+import { uploadToIPFS, placeholderCIDFor } from "@/lib/ipfs";
 import { generateSampleCertificatePDF } from "@/lib/pdfGenerator";
 
 const ClubProposals = () => {
@@ -136,8 +136,9 @@ const ClubProposals = () => {
               const studentName = u.name || u.displayName || u.email || targetUid;
               const courseName = proposal.eventName || proposal.eventId || "Club Event";
 
-              // Generate PDF for the certificate
-              let ipfsHash = `proposal-${proposal.eventId}`;
+              // Generate PDF for the certificate; fall back to an explicit
+              // no-document sentinel (never an invalid CID, which would revert on-chain)
+              let ipfsHash = placeholderCIDFor(`proposal:${proposal.eventId}:${targetUid}`);
               try {
                 const pdf = await generateSampleCertificatePDF({
                   studentName,

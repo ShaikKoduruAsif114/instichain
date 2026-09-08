@@ -1,0 +1,29 @@
+name,value,unit,status,sample_size,method,command,evidence_file,notes
+contract_tests_passing,82,tests,measured,82,hardhat test run,cd blockchain && npx hardhat test,blockchain/test/,core + security suites
+repo_integrity_tests_passing,8,tests,measured,8,pytest on real repo files,python -m pytest tests/ -v,tests/test_repo_integrity.py,
+contract_compile_status,pass,status,measured,,hardhat compile,cd blockchain && npx hardhat compile,reports/BASELINE_REPORT.md,pre-fix failure documented
+contract_coverage_statements,98.72,percent,measured,,hardhat coverage,cd blockchain && npx hardhat coverage --testfiles test,coverage output,
+contract_coverage_branches,86.05,percent,measured,,hardhat coverage,cd blockchain && npx hardhat coverage --testfiles test,coverage output,
+contract_coverage_functions,100,percent,measured,,hardhat coverage,cd blockchain && npx hardhat coverage --testfiles test,coverage output,
+contract_coverage_lines,92.79,percent,measured,,hardhat coverage,cd blockchain && npx hardhat coverage --testfiles test,coverage output,
+gas_individual_issue_certificate,313622,gas/cert,measured,386,receipt gasUsed sum,npx hardhat run scripts/benchmark-gas.js,benchmarks/gas-benchmark.json,avg sizes 10-200; 310816 for first cert
+gas_batch_200_certificates,57438668,gas total,measured,200,receipt gasUsed sum,npx hardhat run scripts/benchmark-gas.js,benchmarks/gas-benchmark.json,4 batch txs of 50
+gas_batch_per_certificate,287193,gas/cert,measured,200,batch total / certs,npx hardhat run scripts/benchmark-gas.js,benchmarks/gas-benchmark.json,stable for sizes >= 25
+gas_savings_batch_vs_individual,8.4,percent,measured,100,1 - batch/individual (num 2628808; denom 31362584),npx hardhat run scripts/benchmark-gas.js,benchmarks/gas-benchmark.json,size=1 is -2.7%; plateau 8.4%
+max_batch_size_block_gas_limit_finding,100-cert batch = 28719358 gas > 30M limit; cap now 50,finding,measured,,observed out-of-gas + receipts,npx hardhat run scripts/benchmark-gas.js,reports/BASELINE_REPORT.md; CertificateRegistry.sol,
+verify_latency_1000_mean,1.624,ms,measured,1000,hrtime per call,npx hardhat run scripts/benchmark-verify-latency.js,benchmarks/verify-latency.json,local node; NOT Internet latency
+verify_latency_1000_p95,2.272,ms,measured,1000,percentile,npx hardhat run scripts/benchmark-verify-latency.js,benchmarks/verify-latency.json,
+verify_latency_100_success_rate,1.0,ratio,measured,100,status check per call,npx hardhat run scripts/benchmark-verify-latency.js,benchmarks/verify-latency.json,100/100 VALID
+e2e_1000_certificates_issuance_success,1.0,ratio,measured,1000,batch issuance 50/tx,npx hardhat run scripts/benchmark-e2e-load.js,benchmarks/e2e-load.json,9.92s; 287494.55 gas/cert; 100.8 certs/s
+e2e_1000_certificates_verification_success,1.0,ratio,measured,1000,full verification pass,npx hardhat run scripts/benchmark-e2e-load.js,benchmarks/e2e-load.json,0.92 ms/cert
+e2e_revocation_consistency,80/80,ratio,measured,80,revoke 5% sample + status re-check,npx hardhat run scripts/benchmark-e2e-load.js,benchmarks/e2e-load.json,
+frontend_typecheck,pass,status,measured,,tsc -b --noEmit,npx tsc -b --noEmit,CI on push,
+frontend_build_main_chunk,1737.20 kB raw / 519.90 kB gzip,bytes,measured,,vite build,npm run build,build log 2026-09-09,unchanged vs baseline; code-splitting future work
+frontend_build_time,30.32,seconds,measured,,vite build wall time,npm run build,build log 2026-09-09,
+frontend_lint_baseline_errors,106,problems,measured,,eslint,npm run lint,reports/BASELINE_REPORT.md,96 errors + 10 warnings; 0 added by this pass
+frontend_lighthouse_scores,,score,blocked,,Lighthouse audit,,reports/FINAL_ENGINEERING_REPORT.md,no Chrome tooling in this environment
+ipfs_upload_latency,,ms,blocked,0,Pinata pinFileToIPFS trials,node scripts/benchmark-ipfs.js,benchmarks/ipfs-benchmark.json,needs PINATA_JWT
+ipfs_retrieval_latency,,ms,blocked,0,gateway fetch,PINATA_JWT=<jwt> node scripts/benchmark-ipfs.js,benchmarks/ipfs-benchmark.json,needs upload first
+testnet_deployment,,status,blocked,,hardhat deploy to Amoy/Sepolia,npm run deploy:amoy,reports/FINAL_ENGINEERING_REPORT.md,needs funded PRIVATE_KEY
+firestore_security_rules,,status,not_measured,,firestore.rules + emulator tests,,reports/SECURITY_REPORT.md,rules absent; highest-priority remaining item
+production_user_scale,,status,not_measured,,production deployment test,,README.md,local benchmarks are controlled benchmarks only

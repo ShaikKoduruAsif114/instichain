@@ -1,0 +1,300 @@
+{
+  "project": "InstiChain",
+  "generatedAt": "2026-09-09T00:00:00Z",
+  "commitContext": "working tree on main @ 0561140 (uncommitted hardening pass)",
+  "environment": {
+    "os": "Windows 11",
+    "node": "v24.14.0",
+    "npm": "11.9.0",
+    "hardhat": "2.28.6",
+    "solidity": "0.8.28 (cancun, optimizer 200 runs)",
+    "openzeppelin": "5.6.1",
+    "ethers": "6.16.0",
+    "network": "local Hardhat in-process network (chainId 31337, zero base fee)"
+  },
+  "legend": {
+    "measured": "value produced by an executed command with an evidence file",
+    "blocked": "experiment implemented but not executable here; reason recorded",
+    "not_measured": "no experiment run; no value reported"
+  },
+  "metrics": [
+    {
+      "name": "contract_tests_passing",
+      "value": 82,
+      "unit": "tests",
+      "sample_size": 82,
+      "method": "mocha/hardhat test run of test/CertificateRegistry.test.js + test/Security.test.js",
+      "command": "cd blockchain && npx hardhat test",
+      "status": "measured",
+      "evidence_file": "blockchain/test/ (suites); CI log on push",
+      "environment": "local Hardhat in-process network"
+    },
+    {
+      "name": "repo_integrity_tests_passing",
+      "value": 8,
+      "unit": "tests",
+      "sample_size": 8,
+      "method": "pytest suite reading actual repository files (ABI surface, placeholder-CID scan, gitignore/env checks)",
+      "command": "python -m pytest tests/ -v",
+      "status": "measured",
+      "evidence_file": "tests/test_repo_integrity.py",
+      "environment": "local (Windows 11, Python 3.x)"
+    },
+    {
+      "name": "contract_compile_status",
+      "value": "pass (1 file, evm target cancun)",
+      "unit": "status",
+      "method": "hardhat compile after removing ERC721Enumerable diamond-inheritance breakage",
+      "command": "cd blockchain && npx hardhat compile",
+      "status": "measured",
+      "evidence_file": "reports/BASELINE_REPORT.md §14 (pre-fix failure documented)"
+    },
+    {
+      "name": "contract_coverage_statements",
+      "value": 98.72,
+      "unit": "percent",
+      "sample_size": "all statements in CertificateRegistry.sol",
+      "method": "hardhat-gas-reporter/istanbul via hardhat coverage",
+      "command": "cd blockchain && npx hardhat coverage --testfiles \"test\"",
+      "status": "measured",
+      "evidence_file": "coverage report output (coverage/), reproduced in reports/FINAL_ENGINEERING_REPORT.md",
+      "environment": "local Hardhat network"
+    },
+    {
+      "name": "contract_coverage_branches",
+      "value": 86.05,
+      "unit": "percent",
+      "method": "hardhat coverage",
+      "command": "cd blockchain && npx hardhat coverage --testfiles \"test\"",
+      "status": "measured",
+      "evidence_file": "coverage report output"
+    },
+    {
+      "name": "contract_coverage_functions",
+      "value": 100,
+      "unit": "percent",
+      "method": "hardhat coverage",
+      "command": "cd blockchain && npx hardhat coverage --testfiles \"test\"",
+      "status": "measured",
+      "evidence_file": "coverage report output"
+    },
+    {
+      "name": "contract_coverage_lines",
+      "value": 92.79,
+      "unit": "percent",
+      "method": "hardhat coverage",
+      "command": "cd blockchain && npx hardhat coverage --testfiles \"test\"",
+      "status": "measured",
+      "evidence_file": "coverage report output"
+    },
+    {
+      "name": "gas_individual_issue_certificate",
+      "value": 313622,
+      "unit": "gas per certificate (avg across sizes 10-200; 310816 for the first cert)",
+      "sample_size": 386,
+      "method": "sum of gasUsed from transaction receipts for N individual issueCertificate txs, N in {1,10,25,50,100,200}",
+      "command": "cd blockchain && npx hardhat run scripts/benchmark-gas.js",
+      "status": "measured",
+      "evidence_file": "benchmarks/gas-benchmark.json",
+      "environment": "local Hardhat in-process network; gas units are network-independent"
+    },
+    {
+      "name": "gas_batch_200_certificates",
+      "value": 57438668,
+      "unit": "gas total (4 batch txs of 50)",
+      "sample_size": 200,
+      "method": "sum of gasUsed from receipts of ceil(200/50) batchIssueCertificates txs",
+      "command": "cd blockchain && npx hardhat run scripts/benchmark-gas.js",
+      "status": "measured",
+      "evidence_file": "benchmarks/gas-benchmark.json",
+      "environment": "local Hardhat in-process network"
+    },
+    {
+      "name": "gas_batch_per_certificate",
+      "value": 287193,
+      "unit": "gas per certificate (stable across batch sizes >= 25)",
+      "sample_size": 200,
+      "method": "batch total gas / certificates issued",
+      "command": "cd blockchain && npx hardhat run scripts/benchmark-gas.js",
+      "status": "measured",
+      "evidence_file": "benchmarks/gas-benchmark.json"
+    },
+    {
+      "name": "gas_savings_batch_vs_individual",
+      "value": "8.4%",
+      "unit": "percent (numerator 2628808 gas saved, denominator 31362584 gas, size=100)",
+      "sample_size": 100,
+      "method": "1 - (batch_total_gas / individual_total_gas), measured receipts",
+      "command": "cd blockchain && npx hardhat run scripts/benchmark-gas.js",
+      "status": "measured",
+      "evidence_file": "benchmarks/gas-benchmark.json, benchmarks/gas-benchmark.csv",
+      "note": "size=1 batch costs MORE (-2.7%); savings plateau at 8.4% for sizes >= 50"
+    },
+    {
+      "name": "max_batch_size_block_gas_limit_finding",
+      "value": "100-cert batch = 28719358 gas, exceeds 30M block gas limit (tx ran out of gas); cap reduced to 50",
+      "unit": "finding",
+      "method": "observed ProviderError during measured benchmark run; receipts for all other sizes",
+      "command": "cd blockchain && npx hardhat run scripts/benchmark-gas.js",
+      "status": "measured",
+      "evidence_file": "reports/BASELINE_REPORT.md §14.3, blockchain/contracts/CertificateRegistry.sol (MAX_BATCH_SIZE rationale)"
+    },
+    {
+      "name": "verify_latency_1000_mean",
+      "value": 1.624,
+      "unit": "ms",
+      "sample_size": 1000,
+      "method": "per-call hrtime timing of contract.verifyCertificate on a 1000-cert dataset; ~0.669 ms of it is raw eth_call",
+      "command": "cd blockchain && npx hardhat run scripts/benchmark-verify-latency.js",
+      "status": "measured",
+      "evidence_file": "benchmarks/verify-latency.json",
+      "environment": "local Hardhat in-process node — NOT production Internet latency"
+    },
+    {
+      "name": "verify_latency_1000_p95",
+      "value": 2.272,
+      "unit": "ms",
+      "sample_size": 1000,
+      "method": "percentile of per-call hrtime timings",
+      "command": "cd blockchain && npx hardhat run scripts/benchmark-verify-latency.js",
+      "status": "measured",
+      "evidence_file": "benchmarks/verify-latency.json"
+    },
+    {
+      "name": "verify_latency_100_success_rate",
+      "value": 1.0,
+      "unit": "ratio (100/100 VALID statuses returned)",
+      "sample_size": 100,
+      "method": "status check per verification call",
+      "command": "cd blockchain && npx hardhat run scripts/benchmark-verify-latency.js",
+      "status": "measured",
+      "evidence_file": "benchmarks/verify-latency.json"
+    },
+    {
+      "name": "e2e_1000_certificates_issuance_success",
+      "value": 1.0,
+      "unit": "ratio (1000/1000 issued via 20 batch txs)",
+      "sample_size": 1000,
+      "method": "batch issuance (50/tx) with receipt status checks; total 9.92 s, 287494.55 gas/cert, 100.8 certs/s",
+      "command": "cd blockchain && npx hardhat run scripts/benchmark-e2e-load.js",
+      "status": "measured",
+      "evidence_file": "benchmarks/e2e-load.json",
+      "environment": "local Hardhat in-process network — controlled benchmark, NOT production scale"
+    },
+    {
+      "name": "e2e_1000_certificates_verification_success",
+      "value": 1.0,
+      "unit": "ratio (1000/1000 verified VALID)",
+      "sample_size": 1000,
+      "method": "full verification pass over issued IDs; 0.92 ms/cert",
+      "command": "cd blockchain && npx hardhat run scripts/benchmark-e2e-load.js",
+      "status": "measured",
+      "evidence_file": "benchmarks/e2e-load.json"
+    },
+    {
+      "name": "e2e_revocation_consistency",
+      "value": "80/80 sampled across scales (5+25+50) read REVOKED after revoke",
+      "unit": "ratio",
+      "sample_size": 80,
+      "method": "revoke 5% sample, re-verify status == 2 each time",
+      "command": "cd blockchain && npx hardhat run scripts/benchmark-e2e-load.js",
+      "status": "measured",
+      "evidence_file": "benchmarks/e2e-load.json"
+    },
+    {
+      "name": "frontend_typecheck",
+      "value": "pass (exit 0)",
+      "unit": "status",
+      "method": "tsc project build check",
+      "command": "npx tsc -b --noEmit",
+      "status": "measured",
+      "evidence_file": "CI on push; run log 2026-09-09"
+    },
+    {
+      "name": "frontend_build_main_chunk",
+      "value": "1737.20 kB raw / 519.90 kB gzip",
+      "unit": "bytes",
+      "method": "vite production build output listing",
+      "command": "npm run build",
+      "status": "measured",
+      "evidence_file": "build log 2026-09-09 (dist/assets/index-SQz_4upM.js)",
+      "note": "essentially unchanged vs baseline 1734.54 kB — dependency set unchanged by this pass; code-splitting is future work"
+    },
+    {
+      "name": "frontend_build_time",
+      "value": 30.32,
+      "unit": "seconds",
+      "method": "vite build wall time",
+      "command": "npm run build",
+      "status": "measured",
+      "evidence_file": "build log 2026-09-09"
+    },
+    {
+      "name": "frontend_lint_baseline_errors",
+      "value": 106,
+      "unit": "problems (96 errors, 10 warnings)",
+      "method": "eslint run; unchanged from baseline (this pass added 0 new issues, fixed 1 regression)",
+      "command": "npm run lint",
+      "status": "measured",
+      "evidence_file": "reports/BASELINE_REPORT.md §3; run log 2026-09-09"
+    },
+    {
+      "name": "frontend_lighthouse_scores",
+      "value": null,
+      "unit": "score",
+      "method": "Lighthouse audit",
+      "status": "blocked",
+      "blocker": "no Chrome/Chromium or Lighthouse tooling available in this environment; no numbers reported rather than estimates",
+      "evidence_file": "reports/FINAL_ENGINEERING_REPORT.md §Limitations"
+    },
+    {
+      "name": "ipfs_upload_latency",
+      "value": null,
+      "unit": "ms",
+      "sample_size": 0,
+      "method": "Pinata pinFileToIPFS per-size trials (120/350/900 KB), payload pipeline validated locally",
+      "command": "cd blockchain && node scripts/benchmark-ipfs.js   (add PINATA_JWT=<jwt> for network runs)",
+      "status": "blocked",
+      "blocker": "no Pinata JWT available in this environment; script implemented and ready",
+      "evidence_file": "benchmarks/ipfs-benchmark.json (records blocked status per size)"
+    },
+    {
+      "name": "ipfs_retrieval_latency",
+      "value": null,
+      "unit": "ms",
+      "method": "gateway fetch per uploaded CID",
+      "command": "cd blockchain && PINATA_JWT=<jwt> node scripts/benchmark-ipfs.js",
+      "status": "blocked",
+      "blocker": "depends on successful upload; no Pinata JWT available",
+      "evidence_file": "benchmarks/ipfs-benchmark.json"
+    },
+    {
+      "name": "testnet_deployment",
+      "value": null,
+      "unit": "status",
+      "method": "hardhat deploy to Amoy/Sepolia",
+      "command": "cd blockchain && npm run deploy:amoy",
+      "status": "blocked",
+      "blocker": "requires a funded testnet private key (PRIVATE_KEY env); not available here; deployment scripts exist and are documented in README",
+      "evidence_file": "reports/FINAL_ENGINEERING_REPORT.md §Blockers"
+    },
+    {
+      "name": "firestore_security_rules",
+      "value": null,
+      "unit": "status",
+      "method": "firestore.rules file + emulator tests",
+      "status": "not_measured",
+      "blocker": "no rules exist in repo (flagged as highest-priority remaining security item); authoring them requires project-specific decisions beyond this pass",
+      "evidence_file": "reports/SECURITY_REPORT.md (Unresolved #1)"
+    },
+    {
+      "name": "production_user_scale",
+      "value": null,
+      "unit": "status",
+      "method": "any production deployment test",
+      "status": "not_measured",
+      "blocker": "no production deployment exists; local benchmarks are labeled as controlled benchmarks and must not be read as production scale",
+      "evidence_file": "README.md (Limitations)"
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "benchmark": "instichain-ipfs-pipeline",
+  "version": 1,
+  "measuredAt": "2026-09-08T23:22:05.474Z",
+  "credentialsProvided": false,
+  "endpoint": "https://api.pinata.cloud/pinning/pinFileToIPFS",
+  "gateway": "https://gateway.pinata.cloud/ipfs/",
+  "trialsPerSize": 5,
+  "sizes": [
+    {
+      "label": "certificate-pdf-small",
+      "bytes": 122880,
+      "payloadPreparationMs": 2.26,
+      "upload": {
+        "status": "blocked",
+        "reason": "no Pinata JWT in environment (set PINATA_JWT)"
+      },
+      "retrieval": {
+        "status": "blocked",
+        "reason": "upload blocked; no CID to fetch"
+      }
+    },
+    {
+      "label": "certificate-pdf-typical",
+      "bytes": 358400,
+      "payloadPreparationMs": 4.24,
+      "upload": {
+        "status": "blocked",
+        "reason": "no Pinata JWT in environment (set PINATA_JWT)"
+      },
+      "retrieval": {
+        "status": "blocked",
+        "reason": "upload blocked; no CID to fetch"
+      }
+    },
+    {
+      "label": "certificate-pdf-rich",
+      "bytes": 921600,
+      "payloadPreparationMs": 10.53,
+      "upload": {
+        "status": "blocked",
+        "reason": "no Pinata JWT in environment (set PINATA_JWT)"
+      },
+      "retrieval": {
+        "status": "blocked",
+        "reason": "upload blocked; no CID to fetch"
+      }
+    }
+  ],
+  "blocker": "IPFS upload/retrieval latency NOT measured: no Pinata credentials in this environment. Provide a Pinata API JWT (PINATA_JWT env var) and re-run: PINATA_JWT=<jwt> node scripts/benchmark-ipfs.js"
+}

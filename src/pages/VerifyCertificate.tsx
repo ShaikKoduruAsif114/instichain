@@ -45,6 +45,7 @@ import {
   verifyAdminByWallet,
   Certificate,
   AdminToken,
+  VerificationStatus,
   decodeVerificationHash,
 } from "@/lib/blockchain";
 import { getIPFSUrl, isValidIPFSHash } from "@/lib/ipfs";
@@ -53,6 +54,7 @@ import { parseCertificateIdFromUrl } from "@/lib/qrcode";
 interface VerificationResult {
   certificateId: number;
   certificate: Certificate;
+  status: VerificationStatus;
   isValid: boolean;
   verifiedAt: string;
 }
@@ -102,26 +104,47 @@ const VerifyCertificate = () => {
   // =================== VERIFICATION FUNCTIONS ===================
 
   const handleVerifyCertificateId = async (certId: string) => {
-    try {
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
+    setVerificationResult(null);
+    setAdminResult(null);
+    setWalletCertificates([]);
 
+    try {
       const id = parseInt(certId, 10);
-      if (isNaN(id)) {
-        throw new Error("Invalid certificate ID");
+      if (isNaN(id) || id < 0 || String(id) !== certId.trim()) {
+        throw new Error("Invalid certificate ID — please enter a non-negative whole number");
       }
 
-      const { certificate, isValid } = await verifyCertificate(id);
+      // verifyCertificate never throws for on-chain outcomes: it returns an
+      // explicit status (VALID / REVOKED / NOT_FOUND) or ERROR for transport
+      // failures. Each state gets its own unambiguous UI treatment.
+      const { certificate, status, isValid } = await verifyCertificate(id);
+
+      if (status === "ERROR") {
+        throw new Error(
+          "Verification service unavailable — could not reach the blockchain node. Please try again later."
+        );
+      }
+
+      if (status === "NOT_FOUND") {
+        setError(`No certificate exists with ID ${id}. Double-check the ID or QR link.`);
+        toast({ description: "❌ Certificate not found", variant: "destructive" });
+        return;
+      }
 
       setVerificationResult({
         certificateId: id,
-        certificate,
+        certificate: certificate!,
+        status,
         isValid,
         verifiedAt: new Date().toISOString(),
       });
 
       toast({
-        description: isValid ? "✅ Certificate verified successfully" : "⚠️ Certificate is revoked",
+        description: isValid
+          ? "✅ Certificate verified successfully"
+          : "⚠️ Certificate has been revoked",
       });
     } catch (error: any) {
       setError(error.message);
@@ -224,20 +247,23 @@ const VerifyCertificate = () => {
         const id = parseInt(decoded.value, 10);
         if (isNaN(id)) throw new Error("Invalid certificate ID in hash");
 
-        try {
-          const { certificate, isValid } = await verifyCertificate(id);
-          setVerificationResult({
-            certificateId: id,
-            certificate,
-            isValid,
-            verifiedAt: new Date().toISOString(),
-          });
-          toast({
-            description: isValid ? "✅ Certificate verified successfully" : "⚠️ Certificate is revoked",
-          });
-        } catch (e: any) {
-          throw new Error("Certificate not found or invalid: " + e.message);
+        const { certificate, status, isValid } = await verifyCertificate(id);
+        if (status === "ERROR") {
+          throw new Error("Verification service unavailable — please try again later");
         }
+        if (status === "NOT_FOUND") {
+          throw new Error(`No certificate exists with ID ${id}`);
+        }
+        setVerificationResult({
+          certificateId: id,
+          certificate: certificate!,
+          status,
+          isValid,
+          verifiedAt: new Date().toISOString(),
+        });
+        toast({
+          description: isValid ? "✅ Certificate verified successfully" : "⚠️ Certificate has been revoked",
+        });
       } else if (decoded.type === "admin") {
         try {
           const { adminToken, isValid } = await verifyAdminByWallet(decoded.value);
@@ -265,8 +291,8 @@ const VerifyCertificate = () => {
 
   // =================== RENDER FUNCTIONS ===================
 
-  const renderAuthenticityBadge = (isValid: boolean) => {
-    if (isValid) {
+  const renderAuthenticityBadge = (result: VerificationResult) => {
+    if (result.status === "VALID") {
       return (
         <div className="flex items-center gap-2 p-4 bg-green-50 border border-green-200 rounded-lg">
           <CheckCircle className="w-6 h-6 text-green-600" />
@@ -276,17 +302,18 @@ const VerifyCertificate = () => {
           </div>
         </div>
       );
-    } else {
-      return (
-        <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <XCircle className="w-6 h-6 text-red-600" />
-          <div>
-            <p className="font-semibold text-red-900">❌ Certificate Revoked</p>
-            <p className="text-sm text-red-700">This certificate has been revoked by the issuer</p>
-          </div>
-        </div>
-      );
     }
+    // Only REVOKED reaches here: NOT_FOUND and ERROR are surfaced as errors
+    // and never produce a certificate card.
+    return (
+      <div className="flex items-center gap-2 p-4 bg-red-50 border border-red-200 rounded-lg">
+        <XCircle className="w-6 h-6 text-red-600" />
+        <div>
+          <p className="font-semibold text-red-900">❌ Certificate Revoked</p>
+          <p className="text-sm text-red-700">This certificate has been revoked by the issuer</p>
+        </div>
+      </div>
+    );
   };
 
   const formatDate = (timestamp: number) => {
@@ -459,7 +486,7 @@ const VerifyCertificate = () => {
         {verificationResult && (
           <div className="space-y-6">
             {/* Authenticity Badge */}
-            {renderAuthenticityBadge(verificationResult.isValid)}
+            {renderAuthenticityBadge(verificationResult)}
 
             {/* Certificate Details */}
             <Card>
